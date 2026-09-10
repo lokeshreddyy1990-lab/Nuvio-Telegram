@@ -8,6 +8,13 @@ char *NuvioTelegramPlaybackURL(
     const char *file_name,
     const char *mime_type
 );
+char *NuvioTelegramVirtualPlaybackURL(const char *spec_json);
+char *NuvioTelegramReadConcat(
+    const char *parts_json,
+    int64_t offset,
+    int32_t length,
+    int32_t *out_length
+);
 int64_t NuvioTelegramCacheSize(void);
 void NuvioTelegramClearCache(void);
 void NuvioTelegramFree(char *value);

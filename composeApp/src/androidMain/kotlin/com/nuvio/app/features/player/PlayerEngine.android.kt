@@ -1814,10 +1814,10 @@ private fun SubtitleStyleState.toMpvSubtitleOutlineSize(): Int =
     if (!outlineEnabled) 0 else (outlineWidth * MPV_SUBTITLE_OUTLINE_SIZE_SCALE).toInt().coerceAtLeast(1)
 
 private fun SubtitleStyleState.toMpvSubtitleBorderStyle(): String =
-    if (outlineEnabled) {
-        "outline-and-shadow"
-    } else if (backgroundColor.alphaByte() > 0) {
-        "opaque-box"
+    // background-box (ASS BorderStyle 4) hugs each line's text width;
+    // opaque-box draws one plain rectangle around the whole cue.
+    if (backgroundColor.alphaByte() > 0) {
+        "background-box"
     } else {
         "outline-and-shadow"
     }

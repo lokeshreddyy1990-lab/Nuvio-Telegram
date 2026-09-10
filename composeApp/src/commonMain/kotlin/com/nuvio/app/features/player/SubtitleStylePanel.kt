@@ -365,7 +365,7 @@ private fun StyleControlsCard(
             label = stringResource(Res.string.compose_player_color),
             colors = SubtitleColorSwatches,
             selectedColor = style.textColor,
-            onColorSelected = { onStyleChanged(style.copy(textColor = it)) },
+            onColorSelected = { onStyleChanged(style.copy(textColor = it.copy(alpha = style.textColor.alpha))) },
         )
 
         Row(
@@ -389,6 +389,45 @@ private fun StyleControlsCard(
                 onPlus = {
                     val newAlpha = (currentAlphaPercent + 10).coerceAtMost(100) / 100f
                     onStyleChanged(style.copy(textColor = style.textColor.copy(alpha = newAlpha)))
+                },
+                buttonSize = btnSize,
+                buttonRadius = btnRadius,
+                minWidth = 58.dp,
+            )
+        }
+
+        ColorPickerRow(
+            label = stringResource(Res.string.compose_player_background),
+            colors = SubtitleBackgroundColorSwatches,
+            selectedColor = style.backgroundColor,
+            matchRgbOnly = true,
+            onColorSelected = { color ->
+                val alpha = if (color.alpha == 0f) 0f else style.backgroundColor.alpha.takeIf { it > 0f } ?: color.alpha
+                onStyleChanged(style.copy(backgroundColor = color.copy(alpha = alpha)))
+            },
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val currentAlphaPercent = (style.backgroundColor.alpha * 100f).roundToInt().coerceIn(0, 100)
+            Text(
+                text = stringResource(Res.string.compose_player_background_opacity),
+                color = colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            StepperControl(
+                value = "$currentAlphaPercent%",
+                onMinus = {
+                    val newAlpha = (currentAlphaPercent - 10).coerceAtLeast(0) / 100f
+                    onStyleChanged(style.copy(backgroundColor = style.backgroundColor.copy(alpha = newAlpha)))
+                },
+                onPlus = {
+                    val newAlpha = (currentAlphaPercent + 10).coerceAtMost(100) / 100f
+                    onStyleChanged(style.copy(backgroundColor = style.backgroundColor.copy(alpha = newAlpha)))
                 },
                 buttonSize = btnSize,
                 buttonRadius = btnRadius,
@@ -658,6 +697,7 @@ private fun ColorPickerRow(
     colors: List<Color>,
     selectedColor: Color,
     onColorSelected: (Color) -> Unit,
+    matchRgbOnly: Boolean = false,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     Column(
@@ -673,7 +713,15 @@ private fun ColorPickerRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             colors.forEach { color ->
-                val isSelected = selectedColor == color
+                val isSelected = if (matchRgbOnly) {
+                    if (color.alpha == 0f) selectedColor.alpha == 0f
+                    else selectedColor.alpha > 0f &&
+                        selectedColor.red == color.red &&
+                        selectedColor.green == color.green &&
+                        selectedColor.blue == color.blue
+                } else {
+                    selectedColor == color
+                }
                 Box(
                     modifier = Modifier
                         .size(22.dp)

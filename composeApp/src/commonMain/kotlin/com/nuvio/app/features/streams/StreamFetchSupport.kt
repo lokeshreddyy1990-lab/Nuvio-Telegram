@@ -486,6 +486,56 @@ internal fun List<StreamItem>.sortedForGroupedDisplay(): List<StreamItem> =
         ),
     )
 
+internal fun List<StreamItem>.deduplicatedIndexerStreams(): List<StreamItem> {
+    if (size <= 1) return this
+    val selected = LinkedHashMap<String, StreamItem>(size)
+    for (stream in this) {
+        val key = stream.indexerDuplicateKey()
+        val current = selected[key]
+        if (current == null || stream.isPreferredIndexerDuplicateOf(current)) {
+            selected[key] = stream
+        }
+    }
+    return selected.values.toList()
+}
+
+internal fun StreamItem.indexerDuplicateKey(): String {
+    val addon = addonId.trim().lowercase()
+    val service = clientResolve?.service.orEmpty().trim().lowercase()
+    val hash = p2pInfoHash?.lowercase()
+    val fileIndex = (fileIdx ?: clientResolve?.fileIdx ?: p2pFileIdx)?.toString().orEmpty()
+    if (!hash.isNullOrBlank()) {
+        return "hash:$addon:$service:$hash:$fileIndex"
+    }
+    val playbackUrl = (playableDirectUrl ?: directPlaybackUrl ?: torrentMagnetUri ?: externalOpenUrl)
+        ?.trim()
+        ?.lowercase()
+        .orEmpty()
+    if (playbackUrl.isNotBlank()) {
+        return "url:$addon:$service:$playbackUrl"
+    }
+    val filename = listOfNotNull(
+        behaviorHints.filename,
+        clientResolve?.filename,
+        clientResolve?.stream?.raw?.filename,
+    ).firstOrNull { it.isNotBlank() }?.trim()?.lowercase().orEmpty()
+    val size = behaviorHints.videoSize ?: clientResolve?.stream?.raw?.size
+    if (filename.isNotBlank() && size != null && size > 0L) {
+        return "file:$addon:$service:$filename:$size"
+    }
+    return "unique:$addon:$service:${name.orEmpty()}:${title.orEmpty()}:${description.orEmpty()}"
+}
+
+private fun StreamItem.isPreferredIndexerDuplicateOf(other: StreamItem): Boolean {
+    val thisCached = debridCacheStatus?.state == StreamDebridCacheState.CACHED || clientResolve?.isCached == true
+    val otherCached = other.debridCacheStatus?.state == StreamDebridCacheState.CACHED || other.clientResolve?.isCached == true
+    if (thisCached != otherCached) return thisCached
+    val thisDirect = !playableDirectUrl.isNullOrBlank()
+    val otherDirect = !other.playableDirectUrl.isNullOrBlank()
+    if (thisDirect != otherDirect) return thisDirect
+    return false
+}
+
 private fun String.fallbackRepositoryLabel(): String {
     val withoutQuery = substringBefore("?")
     val withoutManifest = withoutQuery.removeSuffix("/manifest.json")

@@ -427,10 +427,11 @@ object StreamsRepository {
                 }
             }
             fun presentStreamGroup(group: AddonStreamGroup): AddonStreamGroup {
+                val uniqueGroup = group.copy(streams = group.streams.deduplicatedIndexerStreams())
                 val badgeGroup = StreamBadgePresentation.apply(
-                    groups = listOf(group),
+                    groups = listOf(uniqueGroup),
                     rules = streamBadgeRules,
-                ).firstOrNull() ?: group
+                ).firstOrNull() ?: uniqueGroup
                 return DebridStreamPresentation.apply(
                     groups = listOf(badgeGroup),
                     settings = debridSettings,
@@ -797,7 +798,9 @@ object StreamsRepository {
                                         val mergedStreams = if (completion.streams.isEmpty()) {
                                             group.streams
                                         } else {
-                                            (group.streams + completion.streams).sortedForGroupedDisplay()
+                                            (group.streams + completion.streams)
+                                                .deduplicatedIndexerStreams()
+                                                .sortedForGroupedDisplay()
                                         }
                                         val stillLoading = remaining > 0
                                         val finalError = if (mergedStreams.isEmpty() && !stillLoading) {

@@ -14,9 +14,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -25,6 +25,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 enum class TelegramAuthorizationMode {
     Unsupported,
@@ -158,47 +159,195 @@ object TelegramRepository {
                 value.long("chat_id") to value.long("id")
             }
         val chatTitles = mutableMapOf<Long, String>()
+        val hits = messages.mapNotNull { element -> telegramHit(element.jsonObject) }
+        val used = mutableSetOf<Pair<Long, Long>>()
+        val grouped = hits.groupBy { hit ->
+            val split = parseTelegramSplitInfo(hit.fileName) ?: return@groupBy null
+            hit.chatId to split.groupKey
+        }
 
-        messages.mapNotNull { element ->
-            val message = element.jsonObject
-            val chatId = message.long("chat_id")
-            val content = message.objectValue("content") ?: return@mapNotNull null
-            val media = content.telegramMedia() ?: return@mapNotNull null
-            if (!media.fileName.isLikelyVideoFile(media.mimeType)) return@mapNotNull null
+        val streams = mutableListOf<StreamItem>()
+        for ((key, groupHits) in grouped) {
+            if (key == null) continue
+            val (chatId, groupKey) = key
+            val seed = groupHits.minBy { it.messageId }
+            val parts = gatherSplitParts(chatId, seed.messageId, groupKey, groupHits)
+            if (!contiguousTelegramParts(parts.keys)) continue
+            val ordered = parts.toSortedMap().values.toList()
+            val split = parseTelegramSplitInfo(ordered.first().fileName) ?: continue
+            val stream = virtualStreamItem(
+                hits = ordered,
+                isZip = split.isZip,
+                displayName = split.displayName,
+                season = season,
+                episode = episode,
+                chatTitles = chatTitles,
+            ) ?: continue
+            ordered.forEach { used += it.chatId to it.messageId }
+            streams += stream
+        }
 
-            val playbackUrl = TelegramPlatformClient.playbackUrl(
-                fileId = media.fileId,
-                fileSize = media.fileSize,
-                fileName = media.fileName,
-                mimeType = media.mimeType,
-            )
-                ?: return@mapNotNull null
-            val chatTitle = chatTitles.getOrPut(chatId) {
-                request(
-                    buildJsonObject {
-                        put("@type", "getChat")
-                        put("chat_id", chatId)
-                    },
-                    timeoutSeconds = 8.0,
-                )?.string("title") ?: "Telegram"
-            }
-            val caption = content.objectValue("caption")?.string("text")
-            StreamItem(
-                name = media.fileName,
-                title = media.fileName,
-                description = listOfNotNull(chatTitle, caption?.takeIf { it.isNotBlank() }).joinToString(" • "),
-                url = playbackUrl,
-                sourceName = chatTitle,
-                addonName = "Telegram",
-                addonId = TELEGRAM_ADDON_ID,
-                behaviorHints = StreamBehaviorHints(
-                    notWebReady = true,
-                    videoSize = media.fileSize,
-                    filename = media.fileName,
-                ),
-            )
-        }.distinctBy { it.url }
+        for (hit in hits) {
+            if (hit.chatId to hit.messageId in used) continue
+            if (parseTelegramSplitInfo(hit.fileName) != null) continue
+            if (!isTelegramStreamableName(hit.fileName, hit.mimeType)) continue
+            if (hit.fileName.endsWith(".zip", ignoreCase = true)) continue
+            streams += singleStreamItem(hit, chatTitles) ?: continue
+        }
+        streams.distinctBy { it.url }
     }
+
+    private fun telegramHit(message: JsonObject): TelegramHit? {
+        val chatId = message.long("chat_id")
+        val messageId = message.long("id")
+        if (chatId == 0L || messageId == 0L) return null
+        val content = message.objectValue("content") ?: return null
+        val media = content.telegramMedia() ?: return null
+        val caption = content.objectValue("caption")?.string("text")
+        val fileName = media.fileName.takeUnless { it.startsWith("Telegram video ") }
+            ?: caption?.takeIf { it.isNotBlank() }
+            ?: media.fileName
+        if (!isTelegramStreamableName(fileName, media.mimeType)) return null
+        return TelegramHit(
+            chatId = chatId,
+            messageId = messageId,
+            fileId = media.fileId,
+            fileSize = media.fileSize,
+            fileName = fileName,
+            mimeType = media.mimeType,
+            caption = caption,
+        )
+    }
+
+    private fun gatherSplitParts(
+        chatId: Long,
+        seedId: Long,
+        groupKey: String,
+        known: List<TelegramHit>,
+    ): Map<Int, TelegramHit> {
+        val parts = mutableMapOf<Int, TelegramHit>()
+        fun consider(hit: TelegramHit) {
+            val split = parseTelegramSplitInfo(hit.fileName) ?: return
+            if (hit.chatId != chatId || split.groupKey != groupKey) return
+            parts.putIfAbsent(split.partNumber, hit)
+        }
+        known.forEach(::consider)
+        val startId = maxOf(1L, seedId - SPLIT_SCAN_WINDOW)
+        val ids = (startId..(seedId + SPLIT_SCAN_WINDOW)).toList()
+        val response = request(
+            buildJsonObject {
+                put("@type", "getMessages")
+                put("chat_id", chatId)
+                putJsonArray("message_ids") {
+                    ids.forEach { add(it) }
+                }
+            },
+            timeoutSeconds = 20.0,
+        )
+        val nearby = response?.get("messages") as? JsonArray ?: JsonArray(emptyList())
+        nearby.forEach { element ->
+            val message = element as? JsonObject ?: return@forEach
+            telegramHit(message)?.let(::consider)
+        }
+        return parts
+    }
+
+    private fun virtualStreamItem(
+        hits: List<TelegramHit>,
+        isZip: Boolean,
+        displayName: String,
+        season: Int?,
+        episode: Int?,
+        chatTitles: MutableMap<Long, String>,
+    ): StreamItem? {
+        val playbackParts = hits.map { TelegramPlaybackPart(fileId = it.fileId, size = it.fileSize) }
+        val fileName: String
+        val fileSize: Long
+        val mimeType: String?
+        val innerOffset: Long
+        val innerSize: Long
+        if (isZip) {
+            val zipSize = playbackParts.sumOf { it.size }
+            val entries = parseTelegramZipEntries(zipSize) { offset, length ->
+                TelegramPlatformClient.readConcat(playbackParts, offset, length)
+            }
+            val entry = selectTelegramZipEntry(entries, season, episode) ?: return null
+            fileName = entry.name
+            fileSize = entry.size
+            mimeType = mimeTypeForFileName(entry.name)
+            innerOffset = entry.dataOffset
+            innerSize = entry.size
+        } else {
+            fileName = displayName
+            fileSize = playbackParts.sumOf { it.size }
+            mimeType = hits.first().mimeType ?: mimeTypeForFileName(displayName)
+            innerOffset = 0
+            innerSize = fileSize
+        }
+        val url = TelegramPlatformClient.virtualPlaybackUrl(
+            TelegramVirtualPlaybackSpec(
+                parts = playbackParts,
+                fileName = fileName,
+                mimeType = mimeType,
+                innerOffset = innerOffset,
+                innerSize = innerSize,
+            ),
+        ) ?: return null
+        val chatTitle = chatTitle(hits.first().chatId, chatTitles)
+        val caption = hits.first().caption
+        return StreamItem(
+            name = fileName,
+            title = fileName,
+            description = listOfNotNull(chatTitle, caption?.takeIf { it.isNotBlank() }).joinToString(" • "),
+            url = url,
+            sourceName = chatTitle,
+            addonName = "Telegram",
+            addonId = TELEGRAM_ADDON_ID,
+            behaviorHints = StreamBehaviorHints(
+                notWebReady = true,
+                videoSize = fileSize,
+                filename = fileName,
+            ),
+        )
+    }
+
+    private fun singleStreamItem(
+        hit: TelegramHit,
+        chatTitles: MutableMap<Long, String>,
+    ): StreamItem? {
+        val playbackUrl = TelegramPlatformClient.playbackUrl(
+            fileId = hit.fileId,
+            fileSize = hit.fileSize,
+            fileName = hit.fileName,
+            mimeType = hit.mimeType,
+        ) ?: return null
+        val chatTitle = chatTitle(hit.chatId, chatTitles)
+        return StreamItem(
+            name = hit.fileName,
+            title = hit.fileName,
+            description = listOfNotNull(chatTitle, hit.caption?.takeIf { it.isNotBlank() }).joinToString(" • "),
+            url = playbackUrl,
+            sourceName = chatTitle,
+            addonName = "Telegram",
+            addonId = TELEGRAM_ADDON_ID,
+            behaviorHints = StreamBehaviorHints(
+                notWebReady = true,
+                videoSize = hit.fileSize,
+                filename = hit.fileName,
+            ),
+        )
+    }
+
+    private fun chatTitle(chatId: Long, chatTitles: MutableMap<Long, String>): String =
+        chatTitles.getOrPut(chatId) {
+            request(
+                buildJsonObject {
+                    put("@type", "getChat")
+                    put("chat_id", chatId)
+                },
+                timeoutSeconds = 8.0,
+            )?.string("title") ?: "Telegram"
+        }
 
     private fun searchMessages(query: String, limit: Int): List<kotlinx.serialization.json.JsonElement> {
         val response = request(
@@ -291,6 +440,17 @@ object TelegramRepository {
 }
 
 const val TELEGRAM_ADDON_ID = "telegram"
+private const val SPLIT_SCAN_WINDOW = 20L
+
+private data class TelegramHit(
+    val chatId: Long,
+    val messageId: Long,
+    val fileId: Int,
+    val fileSize: Long,
+    val fileName: String,
+    val mimeType: String?,
+    val caption: String?,
+)
 
 private data class TelegramMedia(
     val fileId: Int,
@@ -321,26 +481,8 @@ private fun JsonObject.telegramMedia(): TelegramMedia? {
     )
 }
 
-private fun buildTelegramSearchQueries(title: String, season: Int?, episode: Int?): List<String> {
-    val normalizedTitle = title
-        .replace(Regex("""[\\/:*?\"<>|]"""), " ")
-        .replace(Regex("""\s+"""), " ")
-        .trim()
-    if (season == null || episode == null) return listOf(normalizedTitle)
-
-    val paddedSeason = season.toString().padStart(2, '0')
-    val paddedEpisode = episode.toString().padStart(2, '0')
-    return listOf(
-        "$normalizedTitle S${paddedSeason}E$paddedEpisode",
-        "$normalizedTitle S${season}E${episode}",
-        "$normalizedTitle ${season}x$paddedEpisode",
-        "$normalizedTitle Season $season Episode $episode",
-    ).distinct()
-}
-
-private fun String.isLikelyVideoFile(mimeType: String?): Boolean =
-    mimeType?.startsWith("video/", ignoreCase = true) == true ||
-        lowercase().substringAfterLast('.', "") in setOf("mkv", "mp4", "m4v", "avi", "mov", "webm", "ts", "m2ts")
+private fun buildTelegramSearchQueries(title: String, season: Int?, episode: Int?): List<String> =
+    telegramSearchQueries(title, season, episode)
 
 private val JsonObject.type: String? get() = string("@type")
 private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull

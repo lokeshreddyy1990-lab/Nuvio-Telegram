@@ -650,6 +650,21 @@ private fun PlaybackSettingsSection(
                     onClick = { showSubtitleBackgroundColorDialog = true },
                 )
                 SettingsGroupDivider(isTablet = isTablet)
+                SettingsSliderRow(
+                    title = stringResource(Res.string.settings_playback_subtitle_background_opacity),
+                    value = (subtitleStyle.backgroundColor.alpha * 100f).roundToInt().coerceIn(0, 100),
+                    valueText = "${(subtitleStyle.backgroundColor.alpha * 100f).roundToInt().coerceIn(0, 100)}%",
+                    valueRange = 0..100,
+                    step = 5,
+                    isTablet = isTablet,
+                    enabled = subtitleRenderingEnabled,
+                    onValueChange = { value ->
+                        PlayerSettingsRepository.setSubtitleStyle(
+                            subtitleStyle.copy(backgroundColor = subtitleStyle.backgroundColor.copy(alpha = value / 100f)),
+                        )
+                    },
+                )
+                SettingsGroupDivider(isTablet = isTablet)
                 SettingsSwitchRow(
                     title = stringResource(Res.string.settings_playback_subtitle_outline),
                     description = stringResource(Res.string.settings_playback_subtitle_outline_description),
@@ -1438,7 +1453,15 @@ private fun PlaybackSettingsSection(
             colors = SubtitleBackgroundColorSwatches,
             selectedColor = autoPlayPlayerSettings.subtitleStyle.backgroundColor,
             onColorSelected = { color ->
-                PlayerSettingsRepository.setSubtitleStyle(autoPlayPlayerSettings.subtitleStyle.copy(backgroundColor = color))
+                val currentAlpha = autoPlayPlayerSettings.subtitleStyle.backgroundColor.alpha
+                val nextColor = if (color.alpha == 0f) {
+                    color
+                } else {
+                    color.copy(alpha = if (currentAlpha > 0f) currentAlpha else color.alpha)
+                }
+                PlayerSettingsRepository.setSubtitleStyle(
+                    autoPlayPlayerSettings.subtitleStyle.copy(backgroundColor = nextColor),
+                )
                 showSubtitleBackgroundColorDialog = false
             },
             onDismiss = { showSubtitleBackgroundColorDialog = false },

@@ -9,6 +9,10 @@ internal expect object TelegramPlatformClient {
 
     fun playbackUrl(fileId: Int, fileSize: Long, fileName: String, mimeType: String?): String?
 
+    fun virtualPlaybackUrl(spec: TelegramVirtualPlaybackSpec): String?
+
+    fun readConcat(parts: List<TelegramPlaybackPart>, offset: Long, length: Int): ByteArray?
+
     fun cacheSizeBytes(): Long
 
     fun clearCache()

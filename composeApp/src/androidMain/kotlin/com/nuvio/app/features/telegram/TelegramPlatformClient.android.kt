@@ -9,6 +9,10 @@ internal actual object TelegramPlatformClient {
 
     actual fun playbackUrl(fileId: Int, fileSize: Long, fileName: String, mimeType: String?): String? = null
 
+    actual fun virtualPlaybackUrl(spec: TelegramVirtualPlaybackSpec): String? = null
+
+    actual fun readConcat(parts: List<TelegramPlaybackPart>, offset: Long, length: Int): ByteArray? = null
+
     actual fun cacheSizeBytes(): Long = 0L
 
     actual fun clearCache() = Unit

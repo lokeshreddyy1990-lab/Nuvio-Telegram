@@ -59,7 +59,7 @@ object StreamParser {
                     proxyHeaders = proxyHeaders,
                 ),
             )
-        }
+        }.deduplicatedIndexerStreams()
     }
 
     private fun JsonObject.string(name: String): String? =

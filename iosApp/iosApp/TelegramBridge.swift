@@ -10,6 +10,20 @@ private struct RegisteredTelegramFile {
     let mimeType: String
 }
 
+private struct VirtualPart {
+    let fileId: Int32
+    let size: Int64
+    let cumStart: Int64
+}
+
+private struct VirtualAsset {
+    let parts: [VirtualPart]
+    let fileName: String
+    let mimeType: String
+    let innerOffset: Int64
+    let innerSize: Int64
+}
+
 private final class TelegramBridgeManager {
     static let shared = TelegramBridgeManager()
 
@@ -22,6 +36,8 @@ private final class TelegramBridgeManager {
     private var listener: NWListener?
     private var listenerPort: UInt16?
     private var registeredFiles: [Int32: RegisteredTelegramFile] = [:]
+    private var virtualAssets: [Int32: VirtualAsset] = [:]
+    private var nextVirtualId: Int32 = 1
     private var apiId: Int32 = 0
     private var apiHash = ""
     private var appVersion = ""
@@ -75,6 +91,22 @@ private final class TelegramBridgeManager {
         lock.unlock()
         let encodedName = encodedHeaderValue(fileName)
         return "http://127.0.0.1:\(port)/telegram/\(fileId)/\(encodedName)"
+    }
+
+    func virtualPlaybackURL(specJSON: String) -> String? {
+        guard let spec = parseVirtualSpec(specJSON), let port = ensureServer() else { return nil }
+        lock.lock()
+        let virtualId = nextVirtualId
+        nextVirtualId += 1
+        virtualAssets[virtualId] = spec
+        lock.unlock()
+        let encodedName = encodedHeaderValue(spec.fileName)
+        return "http://127.0.0.1:\(port)/telegram/v/\(virtualId)/\(encodedName)"
+    }
+
+    func readConcat(partsJSON: String, offset: Int64, length: Int32) -> Data? {
+        guard let parts = parseVirtualParts(partsJSON), length > 0 else { return nil }
+        return readConcatRange(parts: parts, start: offset, end: offset + Int64(length) - 1)
     }
 
     func cacheSize() -> Int64 {
@@ -253,6 +285,31 @@ private final class TelegramBridgeManager {
             return
         }
         let pathSegments = requestParts[1].split(separator: "/")
+        if pathSegments.count >= 4, pathSegments[1] == "v", let virtualId = Int32(pathSegments[2]) {
+            lock.lock()
+            let asset = virtualAssets[virtualId]
+            lock.unlock()
+            guard let asset, asset.innerSize > 0 else {
+                sendError(404, on: connection)
+                return
+            }
+            serve(
+                requestLines: lines,
+                method: method,
+                totalSize: asset.innerSize,
+                fileName: asset.fileName,
+                mimeType: asset.mimeType,
+                on: connection
+            ) { [weak self] range in
+                self?.streamConcat(
+                    parts: asset.parts,
+                    offset: asset.innerOffset + range.lowerBound,
+                    end: asset.innerOffset + range.upperBound,
+                    on: connection
+                )
+            }
+            return
+        }
         guard pathSegments.count >= 3, let fileId = Int32(pathSegments[1]) else {
             sendError(404, on: connection)
             return
@@ -264,15 +321,34 @@ private final class TelegramBridgeManager {
             sendError(404, on: connection)
             return
         }
-        let totalSize = registeredFile.size
+        serve(
+            requestLines: lines,
+            method: method,
+            totalSize: registeredFile.size,
+            fileName: registeredFile.fileName,
+            mimeType: registeredFile.mimeType,
+            on: connection
+        ) { [weak self] range in
+            self?.stream(fileId: fileId, offset: range.lowerBound, end: range.upperBound, on: connection)
+        }
+    }
 
+    private func serve(
+        requestLines lines: [String],
+        method: String,
+        totalSize: Int64,
+        fileName: String,
+        mimeType: String,
+        on connection: NWConnection,
+        startBody: @escaping (ClosedRange<Int64>) -> Void
+    ) {
         let rangeHeader = lines.first { $0.lowercased().hasPrefix("range:") }
         let range = parseRange(rangeHeader, totalSize: totalSize)
         let isPartial = range.lowerBound > 0 || range.upperBound < totalSize - 1
         let contentLength = range.upperBound - range.lowerBound + 1
         var headers = isPartial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n"
-        headers += "Content-Type: \(registeredFile.mimeType)\r\n"
-        headers += "Content-Disposition: inline; filename*=UTF-8''\(encodedHeaderValue(registeredFile.fileName))\r\n"
+        headers += "Content-Type: \(mimeType)\r\n"
+        headers += "Content-Disposition: inline; filename*=UTF-8''\(encodedHeaderValue(fileName))\r\n"
         headers += "Accept-Ranges: bytes\r\n"
         headers += "Content-Length: \(contentLength)\r\n"
         if isPartial {
@@ -280,7 +356,7 @@ private final class TelegramBridgeManager {
         }
         headers += "Connection: close\r\n\r\n"
         let headerData = Data(headers.utf8)
-        connection.send(content: headerData, completion: .contentProcessed { [weak self] error in
+        connection.send(content: headerData, completion: .contentProcessed { error in
             guard error == nil else {
                 connection.cancel()
                 return
@@ -291,50 +367,152 @@ private final class TelegramBridgeManager {
                 })
                 return
             }
-            self?.stream(fileId: fileId, offset: range.lowerBound, end: range.upperBound, on: connection)
+            startBody(range)
         })
     }
 
     private func stream(fileId: Int32, offset: Int64, end: Int64, on connection: NWConnection) {
+        streamConcat(
+            parts: [VirtualPart(fileId: fileId, size: end + 1, cumStart: 0)],
+            offset: offset,
+            end: end,
+            on: connection
+        )
+    }
+
+    private func streamConcat(parts: [VirtualPart], offset: Int64, end: Int64, on connection: NWConnection) {
         guard offset <= end else {
             connection.send(content: nil, isComplete: true, completion: .contentProcessed { _ in connection.cancel() })
             return
         }
-        let chunkSize = min(Int64(1_048_576), end - offset + 1)
+        guard let mapped = mapConcatOffset(parts: parts, offset: offset) else {
+            connection.cancel()
+            return
+        }
+        let partEnd = mapped.part.cumStart + mapped.part.size - 1
+        let chunkEnd = min(end, partEnd)
+        let chunkSize = min(Int64(1_048_576), chunkEnd - offset + 1)
         serverQueue.async { [weak self] in
             guard let self,
-                  let response = self.request([
-                    "@type": "downloadFile",
-                    "file_id": fileId,
-                    "priority": 32,
-                    "offset": offset,
-                    "limit": chunkSize,
-                    "synchronous": true,
-                  ], timeout: 90),
-                  let path = self.localFilePath(response),
-                  let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) else {
+                  let data = self.downloadSlice(fileId: mapped.part.fileId, offset: mapped.localOffset, length: chunkSize),
+                  !data.isEmpty else {
                 connection.cancel()
                 return
             }
-            defer { try? handle.close() }
-            do {
-                try handle.seek(toOffset: UInt64(offset))
-                let data = try handle.read(upToCount: Int(chunkSize)) ?? Data()
-                guard !data.isEmpty else {
+            connection.send(content: data, completion: .contentProcessed { [weak self] error in
+                guard error == nil else {
                     connection.cancel()
                     return
                 }
-                connection.send(content: data, completion: .contentProcessed { [weak self] error in
-                    guard error == nil else {
-                        connection.cancel()
-                        return
-                    }
-                    self?.stream(fileId: fileId, offset: offset + Int64(data.count), end: end, on: connection)
-                })
-            } catch {
-                connection.cancel()
+                self?.streamConcat(parts: parts, offset: offset + Int64(data.count), end: end, on: connection)
+            })
+        }
+    }
+
+    private func readConcatRange(parts: [VirtualPart], start: Int64, end: Int64) -> Data? {
+        guard start <= end else { return Data() }
+        var collected = Data()
+        var pos = start
+        while pos <= end {
+            guard let mapped = mapConcatOffset(parts: parts, offset: pos) else { return nil }
+            let partEnd = mapped.part.cumStart + mapped.part.size - 1
+            let chunkEnd = min(end, partEnd)
+            let length = chunkEnd - pos + 1
+            guard let data = downloadSlice(fileId: mapped.part.fileId, offset: mapped.localOffset, length: length) else {
+                return nil
+            }
+            collected.append(data)
+            pos += Int64(data.count)
+            if data.isEmpty { break }
+        }
+        return collected
+    }
+
+    private func mapConcatOffset(parts: [VirtualPart], offset: Int64) -> (part: VirtualPart, localOffset: Int64)? {
+        for part in parts {
+            let partEnd = part.cumStart + part.size
+            if offset >= part.cumStart && offset < partEnd {
+                return (part, offset - part.cumStart)
             }
         }
+        return nil
+    }
+
+    private func downloadSlice(fileId: Int32, offset: Int64, length: Int64) -> Data? {
+        guard length > 0,
+              let response = request([
+                "@type": "downloadFile",
+                "file_id": fileId,
+                "priority": 32,
+                "offset": offset,
+                "limit": length,
+                "synchronous": true,
+              ], timeout: 90),
+              let path = localFilePath(response),
+              let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) else {
+            return nil
+        }
+        defer { try? handle.close() }
+        do {
+            try handle.seek(toOffset: UInt64(offset))
+            return try handle.read(upToCount: Int(length))
+        } catch {
+            return nil
+        }
+    }
+
+    private func parseVirtualSpec(_ json: String) -> VirtualAsset? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let parts = parseVirtualParts(object["parts"]) else {
+            return nil
+        }
+        let fileName = (object["fileName"] as? String)?.takeIfNotEmpty ?? "video.mkv"
+        let mimeType = (object["mimeType"] as? String)?.takeIfNotEmpty ?? "application/octet-stream"
+        let innerOffset = jsonInt64(object["innerOffset"]) ?? 0
+        var innerSize = jsonInt64(object["innerSize"]) ?? 0
+        let concatSize = parts.last.map { $0.cumStart + $0.size } ?? 0
+        if innerSize <= 0 {
+            innerSize = concatSize
+        }
+        guard concatSize > 0, innerOffset >= 0, innerOffset + innerSize <= concatSize else { return nil }
+        return VirtualAsset(
+            parts: parts,
+            fileName: fileName,
+            mimeType: mimeType,
+            innerOffset: innerOffset,
+            innerSize: innerSize
+        )
+    }
+
+    private func parseVirtualParts(_ json: String) -> [VirtualPart]? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return nil
+        }
+        return parseVirtualParts(object)
+    }
+
+    private func parseVirtualParts(_ object: Any?) -> [VirtualPart]? {
+        guard let items = object as? [[String: Any]], !items.isEmpty else { return nil }
+        var parts: [VirtualPart] = []
+        var cum: Int64 = 0
+        for item in items {
+            let fileId = Int32(jsonInt64(item["fileId"]) ?? 0)
+            let size = jsonInt64(item["size"]) ?? 0
+            guard fileId > 0, size > 0 else { return nil }
+            parts.append(VirtualPart(fileId: fileId, size: size, cumStart: cum))
+            cum += size
+        }
+        return parts
+    }
+
+    private func jsonInt64(_ value: Any?) -> Int64? {
+        if let number = value as? NSNumber { return number.int64Value }
+        if let number = value as? Int64 { return number }
+        if let number = value as? Int { return Int64(number) }
+        if let number = value as? Double { return Int64(number) }
+        return nil
     }
 
     private func localFilePath(_ response: String) -> String? {
@@ -350,6 +528,7 @@ private final class TelegramBridgeManager {
         switch status {
         case 404: reason = "Not Found"
         case 405: reason = "Method Not Allowed"
+        case 415: reason = "Unsupported Media Type"
         default: reason = "Bad Request"
         }
         let payload = Data("HTTP/1.1 \(status) \(reason)\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".utf8)
@@ -492,6 +671,37 @@ func NuvioTelegramPlaybackURL(
             mimeType: mimeType.map { String(cString: $0) }
           ) else { return nil }
     return strdup(url)
+}
+
+@_cdecl("NuvioTelegramVirtualPlaybackURL")
+func NuvioTelegramVirtualPlaybackURL(_ specJSON: UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>? {
+    guard let specJSON,
+          let url = TelegramBridgeManager.shared.virtualPlaybackURL(specJSON: String(cString: specJSON)) else {
+        return nil
+    }
+    return strdup(url)
+}
+
+@_cdecl("NuvioTelegramReadConcat")
+func NuvioTelegramReadConcat(
+    _ partsJSON: UnsafePointer<CChar>?,
+    _ offset: Int64,
+    _ length: Int32,
+    _ outLength: UnsafeMutablePointer<Int32>?
+) -> UnsafeMutablePointer<CChar>? {
+    guard let partsJSON,
+          let data = TelegramBridgeManager.shared.readConcat(
+            partsJSON: String(cString: partsJSON),
+            offset: offset,
+            length: length
+          ),
+          !data.isEmpty,
+          let raw = malloc(data.count) else {
+        return nil
+    }
+    data.copyBytes(to: raw.assumingMemoryBound(to: UInt8.self), count: data.count)
+    outLength?.pointee = Int32(data.count)
+    return raw.assumingMemoryBound(to: CChar.self)
 }
 
 @_cdecl("NuvioTelegramCacheSize")

@@ -1139,7 +1139,14 @@ final class MPVPlayerViewController: UIViewController {
         checkError(mpv_set_property_string(mpv, "sub-color", textColor))
         checkError(mpv_set_property_string(mpv, "sub-back-color", backgroundColor))
         checkError(mpv_set_property_string(mpv, "sub-outline-color", outlineColor))
-        checkError(mpv_set_property_string(mpv, "sub-border-style", backgroundColor.hasPrefix("#00") ? "outline-and-shadow" : "opaque-box"))
+        // background-box (ASS BorderStyle 4) hugs each line's text width;
+        // opaque-box draws one plain rectangle around the whole cue.
+        let backgroundTransparent = backgroundColor.hasPrefix("#00")
+        checkError(mpv_set_property_string(
+            mpv,
+            "sub-border-style",
+            backgroundTransparent ? "outline-and-shadow" : "background-box"
+        ))
         setStringProperty("sub-bold", bold ? "yes" : "no")
         if let fontDirectory, !fontDirectory.isEmpty {
             checkError(mpv_set_property_string(mpv, "sub-fonts-dir", fontDirectory))
