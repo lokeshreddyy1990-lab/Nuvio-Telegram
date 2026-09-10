@@ -17,6 +17,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -26,6 +27,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+
 
 enum class TelegramAuthorizationMode {
     Unsupported,
@@ -173,7 +175,7 @@ object TelegramRepository {
             val seed = groupHits.minBy { it.messageId }
             val parts = gatherSplitParts(chatId, seed.messageId, groupKey, groupHits)
             if (!contiguousTelegramParts(parts.keys)) continue
-            val ordered = parts.toSortedMap().values.toList()
+            val ordered = parts.entries.sortedBy { it.key }.map { it.value }
             val split = parseTelegramSplitInfo(ordered.first().fileName) ?: continue
             val stream = virtualStreamItem(
                 hits = ordered,
@@ -183,7 +185,7 @@ object TelegramRepository {
                 episode = episode,
                 chatTitles = chatTitles,
             ) ?: continue
-            ordered.forEach { used += it.chatId to it.messageId }
+            ordered.forEach { hit -> used += hit.chatId to hit.messageId }
             streams += stream
         }
 
@@ -229,7 +231,9 @@ object TelegramRepository {
         fun consider(hit: TelegramHit) {
             val split = parseTelegramSplitInfo(hit.fileName) ?: return
             if (hit.chatId != chatId || split.groupKey != groupKey) return
-            parts.putIfAbsent(split.partNumber, hit)
+            if (split.partNumber !in parts) {
+                parts[split.partNumber] = hit
+            }
         }
         known.forEach(::consider)
         val startId = maxOf(1L, seedId - SPLIT_SCAN_WINDOW)
@@ -239,7 +243,7 @@ object TelegramRepository {
                 put("@type", "getMessages")
                 put("chat_id", chatId)
                 putJsonArray("message_ids") {
-                    ids.forEach { add(it) }
+                    ids.forEach { id -> add(JsonPrimitive(id)) }
                 }
             },
             timeoutSeconds = 20.0,

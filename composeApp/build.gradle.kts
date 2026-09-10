@@ -54,6 +54,29 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
 
     @TaskAction
     fun generate() {
+        fun escapeKotlinString(value: String): String =
+            buildString(value.length + 8) {
+                value.forEach { ch ->
+                    when (ch) {
+                        '\\' -> append("\\\\")
+                        '"' -> append("\\\"")
+                        '$' -> append("\\\$")
+                        '\n' -> append("\\n")
+                        '\r' -> append("\\r")
+                        '\t' -> append("\\t")
+                        else -> append(ch)
+                    }
+                }
+            }
+
+        fun telegramApiHash(raw: String): String {
+            val trimmed = raw.trim()
+            // my.telegram.org API hashes are short hex strings; session strings break codegen/auth.
+            val looksLikeApiHash = trimmed.length in 8..64 &&
+                trimmed.all { it.isLetterOrDigit() }
+            return if (looksLikeApiHash) trimmed else ""
+        }
+
         val props = Properties()
         localPropertiesFile.asFile.orNull?.takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
 
@@ -65,9 +88,9 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |package com.nuvio.app.core.network
                 |
                 |object SupabaseConfig {
-                |    const val URL = "${supabaseUrl.get()}"
-                |    const val ANON_KEY = "${supabaseAnonKey.get()}"
-                |    const val FALLBACK_URL = "${supabaseFallbackUrl.get()}"
+                |    const val URL = "${escapeKotlinString(supabaseUrl.get())}"
+                |    const val ANON_KEY = "${escapeKotlinString(supabaseAnonKey.get())}"
+                |    const val FALLBACK_URL = "${escapeKotlinString(supabaseFallbackUrl.get())}"
                 |}
                 """.trimMargin()
             )
@@ -80,8 +103,8 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |package com.nuvio.app.core.diagnostics
                 |
                 |object SentryConfig {
-                |    const val DSN = "${sentryDsn.get()}"
-                |    const val ENVIRONMENT = "${sentryEnvironment.get()}"
+                |    const val DSN = "${escapeKotlinString(sentryDsn.get())}"
+                |    const val ENVIRONMENT = "${escapeKotlinString(sentryEnvironment.get())}"
                 |}
                 """.trimMargin()
             )
@@ -96,9 +119,9 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |package com.nuvio.app.features.trakt
                 |
                 |object TraktConfig {
-                |    const val CLIENT_ID = "${props.getProperty("TRAKT_CLIENT_ID", "")}" 
-                |    const val CLIENT_SECRET = "${props.getProperty("TRAKT_CLIENT_SECRET", "")}" 
-                |    const val REDIRECT_URI = "${props.getProperty("TRAKT_REDIRECT_URI", "nuvioenhanced://auth/trakt")}"
+                |    const val CLIENT_ID = "${escapeKotlinString(props.getProperty("TRAKT_CLIENT_ID", ""))}"
+                |    const val CLIENT_SECRET = "${escapeKotlinString(props.getProperty("TRAKT_CLIENT_SECRET", ""))}"
+                |    const val REDIRECT_URI = "${escapeKotlinString(props.getProperty("TRAKT_REDIRECT_URI", "nuvioenhanced://auth/trakt"))}"
                 |}
                 """.trimMargin()
             )
@@ -112,7 +135,7 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |
                 |object TelegramConfig {
                 |    const val API_ID = ${props.getProperty("TELEGRAM_API_ID", "0").toIntOrNull() ?: 0}
-                |    const val API_HASH = "${props.getProperty("TELEGRAM_API_HASH", "")}"
+                |    const val API_HASH = "${escapeKotlinString(telegramApiHash(props.getProperty("TELEGRAM_API_HASH", "")))}"
                 |}
                 """.trimMargin()
             )
