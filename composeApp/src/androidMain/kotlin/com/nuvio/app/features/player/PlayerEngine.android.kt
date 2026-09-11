@@ -1844,7 +1844,7 @@ private fun SubtitleStyleState.toMpvSubtitleBorderStyle(): String =
     }
 
 private const val MPV_SUBTITLE_BOX_PADDING_MIN = 3
-private const val MPV_SUBTITLE_OPAQUE_BOX_LINE_SPACING_FACTOR = 1.8
+private const val MPV_SUBTITLE_OPAQUE_BOX_LINE_SPACING_FACTOR = 1.2
 private const val MPV_SUBTITLE_FONT_SIZE_SCALE = 55.0 / 18.0
 private const val MPV_SUBTITLE_FONT_SIZE_MIN = 36
 private const val MPV_SUBTITLE_FONT_SIZE_MAX = 122

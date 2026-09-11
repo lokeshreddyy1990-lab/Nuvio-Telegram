@@ -1160,7 +1160,7 @@ final class MPVPlayerViewController: UIViewController {
             checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
             var shadow: Double = 0
             checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
-            var lineSpacing = boxPadding * 1.8
+            var lineSpacing = boxPadding * 1.2
             checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
         }
 
