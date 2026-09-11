@@ -134,6 +134,7 @@ object TelegramRepository {
 
     fun refreshCacheSize() {
         scope.launch {
+            TelegramPlatformClient.optimizeCacheIfNeeded()
             _uiState.value = _uiState.value.copy(cacheSizeBytes = TelegramPlatformClient.cacheSizeBytes())
         }
     }
@@ -143,6 +144,11 @@ object TelegramRepository {
             TelegramPlatformClient.clearCache()
             _uiState.value = _uiState.value.copy(cacheSizeBytes = TelegramPlatformClient.cacheSizeBytes())
         }
+    }
+
+    private fun maybeOptimizeCache() {
+        if (!_uiState.value.isConnected) return
+        scope.launch { TelegramPlatformClient.optimizeCacheIfNeeded() }
     }
 
     suspend fun searchStreams(
@@ -401,8 +407,11 @@ object TelegramRepository {
             isBusy = false,
             cacheSizeBytes = TelegramPlatformClient.cacheSizeBytes(),
         )
-        if (mode == TelegramAuthorizationMode.Ready && current.displayName == null) {
-            refreshProfile()
+        if (mode == TelegramAuthorizationMode.Ready) {
+            maybeOptimizeCache()
+            if (current.displayName == null) {
+                refreshProfile()
+            }
         }
     }
 

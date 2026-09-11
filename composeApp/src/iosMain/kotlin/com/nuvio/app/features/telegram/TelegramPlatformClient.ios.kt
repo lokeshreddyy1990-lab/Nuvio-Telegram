@@ -2,6 +2,7 @@ package com.nuvio.app.features.telegram
 
 import com.nuvio.app.features.telegram.iostelegram.NuvioTelegramCacheSize
 import com.nuvio.app.features.telegram.iostelegram.NuvioTelegramClearCache
+import com.nuvio.app.features.telegram.iostelegram.NuvioTelegramOptimizeCache
 import com.nuvio.app.features.telegram.iostelegram.NuvioTelegramFree
 import com.nuvio.app.features.telegram.iostelegram.NuvioTelegramPlaybackURL
 import com.nuvio.app.features.telegram.iostelegram.NuvioTelegramReadConcat
@@ -77,4 +78,6 @@ internal actual object TelegramPlatformClient {
     actual fun cacheSizeBytes(): Long = NuvioTelegramCacheSize()
 
     actual fun clearCache() = NuvioTelegramClearCache()
+
+    actual fun optimizeCacheIfNeeded() = NuvioTelegramOptimizeCache()
 }

@@ -17,4 +17,5 @@ char *NuvioTelegramReadConcat(
 );
 int64_t NuvioTelegramCacheSize(void);
 void NuvioTelegramClearCache(void);
+void NuvioTelegramOptimizeCache(void);
 void NuvioTelegramFree(char *value);

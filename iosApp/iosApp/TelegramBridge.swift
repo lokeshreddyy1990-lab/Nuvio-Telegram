@@ -41,6 +41,13 @@ private final class TelegramBridgeManager {
     private var apiId: Int32 = 0
     private var apiHash = ""
     private var appVersion = ""
+    private var lastCacheOptimizeAt: TimeInterval = 0
+
+    // ponytail: fixed 5 GB cap; raise via settings UI later if users ask
+    private let cacheLimitBytes: Int64 = 5 * 1024 * 1024 * 1024
+    private let storagePolicyTtl = 2_147_483_647
+    private let storagePolicyCount = 2_147_483_647
+    private let cacheOptimizeMinInterval: TimeInterval = 60
 
     private init() {}
 
@@ -110,18 +117,47 @@ private final class TelegramBridgeManager {
     }
 
     func cacheSize() -> Int64 {
-        directorySize(url: filesDirectory)
+        storageSizeFast() ?? directorySize(url: filesDirectory)
     }
 
     func clearCache() {
-        let contents = (try? FileManager.default.contentsOfDirectory(
-            at: filesDirectory,
-            includingPropertiesForKeys: nil
-        )) ?? []
-        for url in contents {
-            try? FileManager.default.removeItem(at: url)
-        }
-        try? FileManager.default.createDirectory(at: filesDirectory, withIntermediateDirectories: true)
+        optimizeStorage(limitBytes: 0)
+    }
+
+    func optimizeCacheIfNeeded() {
+        let now = Date().timeIntervalSince1970
+        guard now - lastCacheOptimizeAt >= cacheOptimizeMinInterval else { return }
+        guard cacheSize() > cacheLimitBytes else { return }
+        lastCacheOptimizeAt = now
+        optimizeStorage(limitBytes: cacheLimitBytes)
+    }
+
+    private func storageSizeFast() -> Int64? {
+        guard let response = request([
+            "@type": "getStorageStatisticsFast",
+            "chat_limit": 0,
+        ], timeout: 10),
+              let data = response.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return jsonInt64(object["size"])
+    }
+
+    private func optimizeStorage(limitBytes: Int64) {
+        _ = request([
+            "@type": "optimizeStorage",
+            "size": limitBytes,
+            "ttl": storagePolicyTtl,
+            "count": storagePolicyCount,
+            "immunity_delay": 0,
+            "file_types": [
+                ["@type": "fileTypeVideo"],
+                ["@type": "fileTypeDocument"],
+            ],
+            "chat_ids": [] as [Int],
+            "exclude_chat_ids": [] as [Int],
+            "return_deleted_file_statistics": false,
+            "chat_limit": 0,
+        ], timeout: 120)
     }
 
     private func setParameters() -> Bool {
@@ -712,6 +748,11 @@ func NuvioTelegramCacheSize() -> Int64 {
 @_cdecl("NuvioTelegramClearCache")
 func NuvioTelegramClearCache() {
     TelegramBridgeManager.shared.clearCache()
+}
+
+@_cdecl("NuvioTelegramOptimizeCache")
+func NuvioTelegramOptimizeCache() {
+    TelegramBridgeManager.shared.optimizeCacheIfNeeded()
 }
 
 @_cdecl("NuvioTelegramFree")

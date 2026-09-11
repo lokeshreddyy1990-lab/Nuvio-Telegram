@@ -16,4 +16,6 @@ internal expect object TelegramPlatformClient {
     fun cacheSizeBytes(): Long
 
     fun clearCache()
+
+    fun optimizeCacheIfNeeded()
 }
