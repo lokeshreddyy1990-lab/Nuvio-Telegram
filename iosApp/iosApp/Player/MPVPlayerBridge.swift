@@ -1137,17 +1137,12 @@ final class MPVPlayerViewController: UIViewController {
 
         checkError(mpv_set_property_string(mpv, "sub-ass-override", "force"))
         checkError(mpv_set_property_string(mpv, "sub-color", textColor))
-        checkError(mpv_set_property_string(mpv, "sub-back-color", backgroundColor))
 
         // opaque-box (ASS BorderStyle 3): one rectangle per line sized to that line's text.
-        // background-box (BorderStyle 4): one plate around the whole cue.
-        //
-        // With opaque-box, outline and shadow each draw their own box. Two semi-transparent
-        // layers that overlap (within a line or between lines) cause a darker seam. Use a
-        // single box layer colored by the background (incl. opacity), and bump line spacing
-        // by ~2x padding so neighboring line boxes abut without overlapping.
+        // Single outline layer only; back-color must stay transparent or boxes stack.
         let backgroundTransparent = backgroundColor.hasPrefix("#00")
         if backgroundTransparent {
+            checkError(mpv_set_property_string(mpv, "sub-back-color", backgroundColor))
             checkError(mpv_set_property_string(mpv, "sub-outline-color", outlineColor))
             checkError(mpv_set_property_string(mpv, "sub-border-style", "outline-and-shadow"))
             var outline = Double(outlineSize)
@@ -1157,8 +1152,7 @@ final class MPVPlayerViewController: UIViewController {
             var lineSpacing: Double = 0
             checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
         } else {
-            // Outline box uses sub-outline-color; keep it equal to back-color so opacity
-            // still comes from the user's background alpha.
+            checkError(mpv_set_property_string(mpv, "sub-back-color", "#00000000"))
             checkError(mpv_set_property_string(mpv, "sub-outline-color", backgroundColor))
             checkError(mpv_set_property_string(mpv, "sub-border-style", "opaque-box"))
             let boxPadding = max(Double(outlineSize), 3.0)
@@ -1166,7 +1160,7 @@ final class MPVPlayerViewController: UIViewController {
             checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
             var shadow: Double = 0
             checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
-            var lineSpacing = boxPadding * 2.0
+            var lineSpacing = boxPadding * 1.8
             checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
         }
 
