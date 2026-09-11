@@ -1670,19 +1670,36 @@ private class NuvioLibmpvView(
             }
 
             override fun applySubtitleStyle(style: SubtitleStyleState) {
-                mpv.setPropertyString("sub-ass-override", "no")
+                mpv.setPropertyString("sub-ass-override", "force")
                 mpv.setPropertyString("sub-color", style.textColor.toMpvColor())
                 mpv.setPropertyString("sub-back-color", style.backgroundColor.toMpvColor())
-                mpv.setPropertyString("sub-outline-color", style.outlineColor.toMpvColor())
-                mpv.setPropertyString("sub-border-color", style.outlineColor.toMpvColor())
                 mpv.setPropertyString("sub-border-style", style.toMpvSubtitleBorderStyle())
                 mpv.setPropertyString("sub-bold", if (style.bold) "yes" else "no")
                 style.customFontDirectory()?.let { mpv.setPropertyString("sub-fonts-dir", it) }
                 mpv.setPropertyString("sub-font", style.toMpvSubtitleFont())
                 mpv.setPropertyInt("sub-font-size", style.toMpvSubtitleFontSize())
-                mpv.setPropertyInt("sub-outline-size", style.toMpvSubtitleOutlineSize())
-                mpv.setPropertyInt("sub-border-size", style.toMpvSubtitleOutlineSize())
                 mpv.setPropertyInt("sub-pos", (100 - style.bottomOffset / 10).coerceIn(0, 100))
+
+                // opaque-box draws outline + shadow as separate boxes; overlapping
+                // semi-transparent layers create a darker seam. One box layer + line
+                // spacing ≈ 2x padding keeps per-line widths and abuts without overlap.
+                // Background opacity remains in sub-back-color / matching outline color.
+                if (style.backgroundColor.alphaByte() > 0) {
+                    val boxPadding = maxOf(style.toMpvSubtitleOutlineSize(), MPV_SUBTITLE_BOX_PADDING_MIN)
+                    mpv.setPropertyString("sub-outline-color", style.backgroundColor.toMpvColor())
+                    mpv.setPropertyString("sub-border-color", style.backgroundColor.toMpvColor())
+                    mpv.setPropertyInt("sub-outline-size", boxPadding)
+                    mpv.setPropertyInt("sub-border-size", boxPadding)
+                    mpv.setPropertyDouble("sub-shadow-offset", 0.0)
+                    mpv.setPropertyDouble("sub-line-spacing", boxPadding * 2.0)
+                } else {
+                    mpv.setPropertyString("sub-outline-color", style.outlineColor.toMpvColor())
+                    mpv.setPropertyString("sub-border-color", style.outlineColor.toMpvColor())
+                    mpv.setPropertyInt("sub-outline-size", style.toMpvSubtitleOutlineSize())
+                    mpv.setPropertyInt("sub-border-size", style.toMpvSubtitleOutlineSize())
+                    mpv.setPropertyDouble("sub-shadow-offset", 0.0)
+                    mpv.setPropertyDouble("sub-line-spacing", 0.0)
+                }
             }
 
             override fun setSubtitleDelayMs(delayMs: Int) {
@@ -1814,14 +1831,15 @@ private fun SubtitleStyleState.toMpvSubtitleOutlineSize(): Int =
     if (!outlineEnabled) 0 else (outlineWidth * MPV_SUBTITLE_OUTLINE_SIZE_SCALE).toInt().coerceAtLeast(1)
 
 private fun SubtitleStyleState.toMpvSubtitleBorderStyle(): String =
-    // background-box (ASS BorderStyle 4) hugs each line's text width;
-    // opaque-box draws one plain rectangle around the whole cue.
+    // opaque-box (ASS BorderStyle 3) draws one rectangle per line sized to that
+    // line's text; background-box (BorderStyle 4) is one plate around the whole cue.
     if (backgroundColor.alphaByte() > 0) {
-        "background-box"
+        "opaque-box"
     } else {
         "outline-and-shadow"
     }
 
+private const val MPV_SUBTITLE_BOX_PADDING_MIN = 3
 private const val MPV_SUBTITLE_FONT_SIZE_SCALE = 55.0 / 18.0
 private const val MPV_SUBTITLE_FONT_SIZE_MIN = 36
 private const val MPV_SUBTITLE_FONT_SIZE_MAX = 122

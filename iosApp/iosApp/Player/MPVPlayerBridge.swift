@@ -1135,26 +1135,46 @@ final class MPVPlayerViewController: UIViewController {
     ) {
         guard mpv != nil else { return }
 
-        checkError(mpv_set_property_string(mpv, "sub-ass-override", "no"))
+        checkError(mpv_set_property_string(mpv, "sub-ass-override", "force"))
         checkError(mpv_set_property_string(mpv, "sub-color", textColor))
         checkError(mpv_set_property_string(mpv, "sub-back-color", backgroundColor))
-        checkError(mpv_set_property_string(mpv, "sub-outline-color", outlineColor))
-        // background-box (ASS BorderStyle 4) hugs each line's text width;
-        // opaque-box draws one plain rectangle around the whole cue.
+
+        // opaque-box (ASS BorderStyle 3): one rectangle per line sized to that line's text.
+        // background-box (BorderStyle 4): one plate around the whole cue.
+        //
+        // With opaque-box, outline and shadow each draw their own box. Two semi-transparent
+        // layers that overlap (within a line or between lines) cause a darker seam. Use a
+        // single box layer colored by the background (incl. opacity), and bump line spacing
+        // by ~2x padding so neighboring line boxes abut without overlapping.
         let backgroundTransparent = backgroundColor.hasPrefix("#00")
-        checkError(mpv_set_property_string(
-            mpv,
-            "sub-border-style",
-            backgroundTransparent ? "outline-and-shadow" : "background-box"
-        ))
+        if backgroundTransparent {
+            checkError(mpv_set_property_string(mpv, "sub-outline-color", outlineColor))
+            checkError(mpv_set_property_string(mpv, "sub-border-style", "outline-and-shadow"))
+            var outline = Double(outlineSize)
+            checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
+            var shadow: Double = 0
+            checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
+            var lineSpacing: Double = 0
+            checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
+        } else {
+            // Outline box uses sub-outline-color; keep it equal to back-color so opacity
+            // still comes from the user's background alpha.
+            checkError(mpv_set_property_string(mpv, "sub-outline-color", backgroundColor))
+            checkError(mpv_set_property_string(mpv, "sub-border-style", "opaque-box"))
+            let boxPadding = max(Double(outlineSize), 3.0)
+            var outline = boxPadding
+            checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
+            var shadow: Double = 0
+            checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
+            var lineSpacing = boxPadding * 2.0
+            checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
+        }
+
         setStringProperty("sub-bold", bold ? "yes" : "no")
         if let fontDirectory, !fontDirectory.isEmpty {
             checkError(mpv_set_property_string(mpv, "sub-fonts-dir", fontDirectory))
         }
         checkError(mpv_set_property_string(mpv, "sub-font", fontFamily))
-
-        var outline = Double(outlineSize)
-        checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
 
         var size = Double(fontSize)
         checkError(mpv_set_property(mpv, "sub-font-size", MPV_FORMAT_DOUBLE, &size))
