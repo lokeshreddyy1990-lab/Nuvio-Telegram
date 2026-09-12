@@ -1686,16 +1686,12 @@ private class NuvioLibmpvView(
                 // opaque-box: one outline layer per line; back-color must stay transparent
                 // or semi-transparent boxes stack. Line spacing < 2x padding closes the slit.
                 if (style.backgroundColor.alphaByte() > 0) {
-                    val boxPadding = maxOf(style.toMpvSubtitleOutlineSize(), MPV_SUBTITLE_BOX_PADDING_MIN)
                     mpv.setPropertyString("sub-outline-color", style.backgroundColor.toMpvColor())
                     mpv.setPropertyString("sub-border-color", style.backgroundColor.toMpvColor())
-                    mpv.setPropertyInt("sub-outline-size", boxPadding)
+                    mpv.setPropertyDouble("sub-outline-size", MPV_SUBTITLE_OUTLINE_SIZE.toDouble())
                     mpv.setPropertyInt("sub-border-size", 0)
-                    mpv.setPropertyDouble("sub-shadow-offset", 0.0)
-                    mpv.setPropertyDouble(
-                        "sub-line-spacing",
-                        boxPadding * MPV_SUBTITLE_OPAQUE_BOX_LINE_SPACING_FACTOR,
-                    )
+                    mpv.setPropertyDouble("sub-shadow-offset", MPV_SUBTITLE_SHADOW_OFFSET)
+                    mpv.setPropertyDouble("sub-line-spacing", MPV_SUBTITLE_LINE_SPACING)
                 } else {
                     mpv.setPropertyString("sub-outline-color", style.outlineColor.toMpvColor())
                     mpv.setPropertyString("sub-border-color", style.outlineColor.toMpvColor())
@@ -1843,8 +1839,9 @@ private fun SubtitleStyleState.toMpvSubtitleBorderStyle(): String =
         "outline-and-shadow"
     }
 
-private const val MPV_SUBTITLE_BOX_PADDING_MIN = 3
-private const val MPV_SUBTITLE_OPAQUE_BOX_LINE_SPACING_FACTOR = 1.2
+private const val MPV_SUBTITLE_OUTLINE_SIZE = 3
+private const val MPV_SUBTITLE_SHADOW_OFFSET = 1.3
+private const val MPV_SUBTITLE_LINE_SPACING = 9.0
 private const val MPV_SUBTITLE_FONT_SIZE_SCALE = 55.0 / 18.0
 private const val MPV_SUBTITLE_FONT_SIZE_MIN = 36
 private const val MPV_SUBTITLE_FONT_SIZE_MAX = 122

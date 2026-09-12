@@ -266,6 +266,12 @@ private final class MpvGLView: GLKView {
 
 // MARK: - MPV Player View Controller
 
+private enum MpvSubtitleStyle {
+    static let outlineSize: Double = 3
+    static let shadowOffset: Double = 1.3
+    static let lineSpacing: Double = 9
+}
+
 final class MPVPlayerViewController: UIViewController {
 
     private static let defaultAudioOutput = "audiounit"
@@ -1155,12 +1161,11 @@ final class MPVPlayerViewController: UIViewController {
             checkError(mpv_set_property_string(mpv, "sub-back-color", "#00000000"))
             checkError(mpv_set_property_string(mpv, "sub-outline-color", backgroundColor))
             checkError(mpv_set_property_string(mpv, "sub-border-style", "opaque-box"))
-            let boxPadding = max(Double(outlineSize), 3.0)
-            var outline = boxPadding
+            var outline = MpvSubtitleStyle.outlineSize
             checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
-            var shadow: Double = 0
+            var shadow = MpvSubtitleStyle.shadowOffset
             checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
-            var lineSpacing = boxPadding * 1.2
+            var lineSpacing = MpvSubtitleStyle.lineSpacing
             checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
         }
 
