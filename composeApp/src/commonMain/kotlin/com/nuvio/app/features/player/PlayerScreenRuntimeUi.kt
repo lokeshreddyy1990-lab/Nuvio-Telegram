@@ -168,7 +168,13 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                 },
                 onSnapshot = { snapshot ->
                     playbackSnapshot = snapshot
-                    if (!snapshot.isLoading) initialLoadCompleted = true
+                    if (
+                        !snapshot.isLoading ||
+                        snapshot.isPlaying ||
+                        snapshot.positionMs > 0L
+                    ) {
+                        initialLoadCompleted = true
+                    }
                     if (snapshot.isEnded) {
                         shouldPlay = false
                         controlsVisible = !playerControlsLocked

@@ -22,7 +22,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitViewController
-import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.touchlab.kermit.Logger
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -64,7 +63,6 @@ actual fun PlatformPlayerSurface(
     val latestOnControllerReady = rememberUpdatedState(onControllerReady)
     val latestOnSnapshot = rememberUpdatedState(onSnapshot)
     val latestOnError = rememberUpdatedState(onError)
-    val density = LocalDensity.current
     PlayerSettingsRepository.ensureLoaded()
     val playerSettings by PlayerSettingsRepository.uiState.collectAsStateWithLifecycle()
     val latestPlayerSettings = rememberUpdatedState(playerSettings)
@@ -360,9 +358,11 @@ actual fun PlatformPlayerSurface(
                 .fillMaxSize()
                 .onSizeChanged { size ->
                     if (size.width > 1 && size.height > 1) {
+                        // Compose reports layout size in the same unit UIKit uses for bounds (points).
+                        // Converting through toDp() divides by density and shrinks the mpv surface.
                         bridge.syncVideoSurfaceLayout(
-                            width = with(density) { size.width.toDp().value.toDouble() },
-                            height = with(density) { size.height.toDp().value.toDouble() },
+                            width = size.width.toDouble(),
+                            height = size.height.toDouble(),
                         )
                     }
                 },
