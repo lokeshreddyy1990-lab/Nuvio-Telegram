@@ -12,6 +12,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.os.Build
 import android.os.SystemClock
+import android.view.LayoutInflater
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.SurfaceHolder
 import android.util.AttributeSet
@@ -962,13 +963,15 @@ private fun ExoPlayerSurface(
     AndroidView(
         modifier = modifier,
         factory = { viewContext ->
-            PlayerView(viewContext).apply {
+            (LayoutInflater.from(viewContext).inflate(R.layout.nuvio_player_view, null) as PlayerView).apply {
                 useController = useNativeController
                 layoutParams = android.view.ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
                 player = exoPlayer
                 keepScreenOn = exoPlayer.shouldKeepPlayerScreenOn()
                 this.resizeMode = resizeMode.toExoResizeMode()
                 setShutterBackgroundColor(android.graphics.Color.BLACK)
+                setUseArtwork(false)
+                setKeepContentOnPlayerReset(true)
                 playerViewRef = this
                 sidecarController.bindSubtitleView(this.subtitleView)
                 syncLibassOverlay(
@@ -1211,7 +1214,8 @@ private fun LibmpvPlayerSurface(
         factory = { viewContext ->
             NuvioLibmpvView(
                 context = viewContext,
-                videoOutput = if (isLocalFileSource) AndroidLibmpvVideoOutput.Gpu else videoOutput,
+                // ponytail: gpu-next often presents audio-only on Android SurfaceView; Gpu is the working vo.
+                videoOutput = AndroidLibmpvVideoOutput.Gpu,
                 hardwareDecodingEnabled = if (isLocalFileSource) false else hardwareDecodingEnabled,
                 yuv420pEnabled = yuv420pEnabled,
             ).apply {

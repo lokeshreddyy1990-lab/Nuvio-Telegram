@@ -228,6 +228,9 @@ data class PlayerPlaybackSnapshot(
     val videoHeight: Int? = null,
 )
 
+internal fun PlayerPlaybackSnapshot.marksInitialLoadComplete(): Boolean =
+    !isLoading || isPlaying || positionMs > 0L || (videoWidth ?: 0) > 0
+
 data class PlayerNowPlayingInfo(
     val title: String,
     val subtitle: String? = null,

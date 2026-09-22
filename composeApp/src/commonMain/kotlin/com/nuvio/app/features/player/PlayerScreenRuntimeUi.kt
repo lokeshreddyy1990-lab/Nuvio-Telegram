@@ -168,7 +168,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                 },
                 onSnapshot = { snapshot ->
                     playbackSnapshot = snapshot
-                    if (!snapshot.isLoading) initialLoadCompleted = true
+                    if (snapshot.marksInitialLoadComplete()) initialLoadCompleted = true
                     if (snapshot.isEnded) {
                         shouldPlay = false
                         controlsVisible = !playerControlsLocked
@@ -397,7 +397,10 @@ private fun BoxScope.RenderPlaybackOverlays(
         metrics = metrics,
         horizontalSafePadding = horizontalSafePadding,
         onUnlock = { unlockPlayerControls() },
-        showOpeningOverlay = playerSettingsUiState.showLoadingOverlay && !initialLoadCompleted && errorMessage == null,
+        showOpeningOverlay = playerSettingsUiState.showLoadingOverlay &&
+            !initialLoadCompleted &&
+            !playbackSnapshot.isPlaying &&
+            errorMessage == null,
         backdropArtwork = background ?: poster,
         logo = logo,
         title = title,

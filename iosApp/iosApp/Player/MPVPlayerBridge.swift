@@ -410,6 +410,7 @@ final class MPVPlayerViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        view.isOpaque = true
         view.layer.masksToBounds = true
 
 #if targetEnvironment(simulator)
@@ -419,6 +420,7 @@ final class MPVPlayerViewController: UIViewController {
         metalLayer.contentsGravity = .resize
         metalLayer.contentsScale = view.window?.screen.nativeScale ?? UIScreen.main.nativeScale
         metalLayer.framebufferOnly = true
+        metalLayer.isOpaque = true
         metalLayer.backgroundColor = UIColor.black.cgColor
         metalLayer.wantsExtendedDynamicRangeContent = true
         metalLayer.anchorPoint = CGPoint(x: 0, y: 0)

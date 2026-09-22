@@ -40,6 +40,15 @@ class PlayerScreenRuntimeStateTest {
     }
 
     @Test
+    fun playbackSnapshotCompletesInitialLoadOnceAudioOrVideoIsActive() {
+        assertFalse(PlayerPlaybackSnapshot().marksInitialLoadComplete())
+        assertTrue(PlayerPlaybackSnapshot(isLoading = false).marksInitialLoadComplete())
+        assertTrue(PlayerPlaybackSnapshot(isLoading = true, isPlaying = true).marksInitialLoadComplete())
+        assertTrue(PlayerPlaybackSnapshot(isLoading = true, positionMs = 1_000L).marksInitialLoadComplete())
+        assertTrue(PlayerPlaybackSnapshot(isLoading = true, videoWidth = 1920, videoHeight = 1080).marksInitialLoadComplete())
+    }
+
+    @Test
     fun episodeFilterUpdatesInvalidateUiWithoutPlaybackUpdates() {
         val runtime = PlayerScreenRuntime(testPlayerScreenArgs())
         val selectedFilter = derivedStateOf { runtime.episodeStreamsRepoState.selectedFilter }

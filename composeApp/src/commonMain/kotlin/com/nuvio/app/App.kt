@@ -2991,8 +2991,10 @@ private fun MainAppContent(
                         val launchId = PlayerLaunchStore.put(playerLaunch)
                         StreamsRepository.cancelLoading()
                         navController.navigate(
-                            PlayerRoute(launchId = launchId)
-                        )
+                            PlayerRoute(launchId = launchId),
+                        ) {
+                            popUpTo<StreamRoute> { inclusive = true }
+                        }
                     }
 
                     // Hide overlay when reuse navigated to external player (prevents reload from showing it again)
@@ -3088,20 +3090,7 @@ private fun MainAppContent(
                         }
                     }
                 }
-                composable<PlayerRoute>(
-                    enterTransition = {
-                        if (isIos) fadeIn(animationSpec = tween(220)) else null
-                    },
-                    exitTransition = {
-                        if (isIos) fadeOut(animationSpec = tween(220)) else null
-                    },
-                    popEnterTransition = {
-                        if (isIos) fadeIn(animationSpec = tween(220)) else null
-                    },
-                    popExitTransition = {
-                        if (isIos) fadeOut(animationSpec = tween(220)) else null
-                    },
-                ) { backStackEntry ->
+                composable<PlayerRoute> { backStackEntry ->
                     val route = backStackEntry.toRoute<PlayerRoute>()
                     val launch = remember(route.launchId) { PlayerLaunchStore.get(route.launchId) }
                     if (launch == null) {

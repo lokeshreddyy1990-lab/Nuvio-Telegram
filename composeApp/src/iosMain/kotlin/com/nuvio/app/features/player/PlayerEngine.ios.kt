@@ -362,7 +362,7 @@ actual fun PlatformPlayerSurface(
     }
 
     // Render the player view
-    Box(modifier = modifier) {
+    Box(modifier = modifier.background(Color.Black)) {
         UIKitViewController(
             factory = { bridge.createPlayerViewController() },
             modifier = Modifier
