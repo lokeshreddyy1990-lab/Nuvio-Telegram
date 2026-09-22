@@ -454,9 +454,11 @@ fun HomeScreen(
             candidates.map { entry ->
                 async {
                     semaphore.withPermit {
-                        resolveContinueWatchingEntryMetadata(entry)?.let { item ->
-                            entry.continueWatchingFallbackKeys().associateWith { item }
-                        }.orEmpty()
+                        runCatching {
+                            resolveContinueWatchingEntryMetadata(entry)?.let { item ->
+                                entry.continueWatchingFallbackKeys().associateWith { item }
+                            }.orEmpty()
+                        }.getOrElse { emptyMap() }
                     }
                 }
             }.awaitAll().fold(mutableMapOf<String, ContinueWatchingItem>()) { acc, itemMap ->

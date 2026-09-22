@@ -239,7 +239,8 @@ object EpisodeReleaseNotificationsRepository {
     fun refreshAsync() {
         ensureLoaded()
         scope.launch {
-            refreshScheduledNotifications()
+            runCatching { refreshScheduledNotifications() }
+                .onFailure { error -> log.e(error) { "Episode release notification refresh failed" } }
         }
     }
 

@@ -255,7 +255,6 @@ import com.nuvio.app.features.streams.StreamLaunchStore
 import com.nuvio.app.features.streams.StreamLinkCacheRepository
 import com.nuvio.app.features.streams.StreamsRepository
 import com.nuvio.app.features.streams.StreamsScreen
-import com.nuvio.app.features.telegram.TelegramRepository
 import com.nuvio.app.features.tmdb.TmdbService
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.trakt.TraktAuthRepository
@@ -499,7 +498,7 @@ fun App() {
         LaunchedEffect(Unit) {
             NetworkStatusRepository.ensureStarted()
             ProfileRepository.loadCachedProfiles()
-            AvatarRepository.fetchAvatars()
+            runCatching { AvatarRepository.fetchAvatars() }
         }
 
         val authState by AuthRepository.state.collectAsStateWithLifecycle()
@@ -1097,7 +1096,6 @@ private fun MainAppContent(
     }
 
     LaunchedEffect(Unit) {
-        TelegramRepository.ensureLoaded()
         NetworkStatusRepository.ensureStarted()
         EpisodeReleaseNotificationsRepository.refreshAsync()
         kotlinx.coroutines.delay(1_500)
@@ -1125,11 +1123,15 @@ private fun MainAppContent(
 
         when (condition) {
             NetworkCondition.NoInternet -> {
-                NuvioToastController.show(getString(Res.string.network_no_internet_connection))
+                runCatching {
+                    NuvioToastController.show(getString(Res.string.network_no_internet_connection))
+                }
             }
 
             NetworkCondition.ServersUnreachable -> {
-                NuvioToastController.show(getString(Res.string.network_cannot_reach_servers))
+                runCatching {
+                    NuvioToastController.show(getString(Res.string.network_cannot_reach_servers))
+                }
             }
 
             NetworkCondition.Online -> {
@@ -1137,7 +1139,9 @@ private fun MainAppContent(
                     previousConditionName == NetworkCondition.NoInternet.name ||
                     previousConditionName == NetworkCondition.ServersUnreachable.name
                 ) {
-                    NuvioToastController.show(getString(Res.string.network_back_online))
+                    runCatching {
+                        NuvioToastController.show(getString(Res.string.network_back_online))
+                    }
                 }
             }
 

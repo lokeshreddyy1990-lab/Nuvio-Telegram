@@ -1,6 +1,7 @@
 package com.nuvio.app.core.diagnostics
 
 import com.nuvio.app.core.build.AppVersionConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,8 +42,18 @@ actual object CrashDiagnostics {
         if (installed) return
         installed = true
         setUnhandledExceptionHook { throwable ->
+            if (!shouldPersistUnhandledException(throwable)) return@setUnhandledExceptionHook
             saveCrashReport(throwable)
         }
+    }
+
+    private fun shouldPersistUnhandledException(throwable: Throwable): Boolean {
+        var current: Throwable? = throwable
+        while (current != null) {
+            if (current is CancellationException) return false
+            current = current.cause
+        }
+        return true
     }
 
     actual fun dismiss(reportId: String) {

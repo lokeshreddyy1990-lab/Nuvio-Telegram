@@ -1,8 +1,10 @@
 package com.nuvio.app.features.telegram
 
+import co.touchlab.kermit.Logger
 import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.features.streams.StreamBehaviorHints
 import com.nuvio.app.features.streams.StreamItem
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -55,6 +57,7 @@ data class TelegramUiState(
 }
 
 object TelegramRepository {
+    private val log = Logger.withTag("TelegramRepository")
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _uiState = MutableStateFlow(TelegramUiState())
@@ -68,27 +71,37 @@ object TelegramRepository {
         if (initialized) return
         initialized = true
         initializationJob = scope.launch {
-            when {
-                !TelegramPlatformClient.isSupported -> {
-                    _uiState.value = TelegramUiState(mode = TelegramAuthorizationMode.Unsupported)
+            try {
+                when {
+                    !TelegramPlatformClient.isSupported -> {
+                        _uiState.value = TelegramUiState(mode = TelegramAuthorizationMode.Unsupported)
+                    }
+                    TelegramConfig.API_ID <= 0 || TelegramConfig.API_HASH.isBlank() -> {
+                        _uiState.value = TelegramUiState(mode = TelegramAuthorizationMode.MissingCredentials)
+                    }
+                    !TelegramPlatformClient.start(
+                        apiId = TelegramConfig.API_ID,
+                        apiHash = TelegramConfig.API_HASH,
+                        appVersion = AppVersionConfig.VERSION_NAME,
+                    ) -> {
+                        _uiState.value = TelegramUiState(
+                            mode = TelegramAuthorizationMode.Error,
+                            errorMessage = "TDLib could not be started",
+                        )
+                    }
+                    else -> {
+                        clearDownloadedCacheOnColdStart()
+                        pollAuthorizationState()
+                    }
                 }
-                TelegramConfig.API_ID <= 0 || TelegramConfig.API_HASH.isBlank() -> {
-                    _uiState.value = TelegramUiState(mode = TelegramAuthorizationMode.MissingCredentials)
-                }
-                !TelegramPlatformClient.start(
-                    apiId = TelegramConfig.API_ID,
-                    apiHash = TelegramConfig.API_HASH,
-                    appVersion = AppVersionConfig.VERSION_NAME,
-                ) -> {
-                    _uiState.value = TelegramUiState(
-                        mode = TelegramAuthorizationMode.Error,
-                        errorMessage = "TDLib could not be started",
-                    )
-                }
-                else -> {
-                    clearDownloadedCacheOnColdStart()
-                    pollAuthorizationState()
-                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                log.e(e) { "Telegram initialization failed" }
+                _uiState.value = TelegramUiState(
+                    mode = TelegramAuthorizationMode.Error,
+                    errorMessage = e.message ?: "Telegram initialization failed",
+                )
             }
         }
     }
@@ -97,8 +110,12 @@ object TelegramRepository {
     private fun clearDownloadedCacheOnColdStart() {
         if (coldStartCacheCleared) return
         coldStartCacheCleared = true
-        TelegramPlatformClient.clearCache()
-        _uiState.value = _uiState.value.copy(cacheSizeBytes = TelegramPlatformClient.cacheSizeBytes())
+        runCatching {
+            TelegramPlatformClient.clearCache()
+            _uiState.value = _uiState.value.copy(cacheSizeBytes = TelegramPlatformClient.cacheSizeBytes())
+        }.onFailure { error ->
+            log.w(error) { "Telegram cold-start cache clear failed" }
+        }
     }
 
     fun submitPhoneNumber(phoneNumber: String) = submitAuthenticationRequest(
