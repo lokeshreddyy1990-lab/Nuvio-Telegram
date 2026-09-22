@@ -635,6 +635,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
                     parentMetaType = parentMetaType,
                     season = activeSeasonNumber,
                     episode = activeEpisodeNumber,
+                    searchTitle = title,
                     forceRefresh = true,
                 )
             }
@@ -670,6 +671,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
                 parentMetaType = parentMetaType,
                 season = episode.season,
                 episode = episode.episode,
+                searchTitle = title,
             )
             episodeStreamsPanelState = EpisodeStreamsPanelState(showStreams = true, selectedEpisode = episode)
         },
@@ -689,6 +691,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
                     parentMetaType = parentMetaType,
                     season = episode.season,
                     episode = episode.episode,
+                    searchTitle = title,
                     forceRefresh = true,
                 )
             }

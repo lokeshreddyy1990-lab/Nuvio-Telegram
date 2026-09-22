@@ -249,6 +249,7 @@ internal fun PlayerScreenRuntime.switchToSource(stream: StreamItem) {
                         parentMetaType = parentMetaType,
                         season = activeSeasonNumber,
                         episode = activeEpisodeNumber,
+                        searchTitle = title,
                         forceRefresh = true,
                     )
                 }
@@ -307,6 +308,7 @@ internal fun PlayerScreenRuntime.switchToEpisodeStream(stream: StreamItem, episo
                     parentMetaType = parentMetaType,
                     season = episode.season,
                     episode = episode.episode,
+                    searchTitle = title,
                     forceRefresh = true,
                 )
             },
@@ -394,6 +396,7 @@ internal fun PlayerScreenRuntime.playNextEpisode() {
         parentMetaId = parentMetaId,
         parentMetaType = parentMetaType,
         contentType = contentType,
+        searchTitle = title,
         settings = playerSettingsUiState,
         currentProviderAddonId = activeProviderAddonId,
         currentProviderName = activeProviderName,
@@ -431,6 +434,7 @@ internal fun PlayerScreenRuntime.preloadNextEpisodeStreams() {
         parentMetaType = parentMetaType,
         season = nextVideo.season,
         episode = nextVideo.episode,
+        searchTitle = title,
     )
 }
 
@@ -474,6 +478,7 @@ internal fun PlayerScreenRuntime.openSourcesPanel() {
         parentMetaType = parentMetaType,
         season = activeSeasonNumber,
         episode = activeEpisodeNumber,
+        searchTitle = title,
     )
     showSourcesPanel = true
     showEpisodesPanel = false
