@@ -365,8 +365,8 @@ actual fun PlatformPlayerSurface(
         }
     }
 
-    // Render the player view
-    Box(modifier = modifier.background(Color.Black)) {
+    // Don't paint Skia over the UIKit hole — the native view is already black.
+    Box(modifier = modifier) {
         UIKitViewController(
             factory = { bridge.createPlayerViewController() },
             modifier = Modifier

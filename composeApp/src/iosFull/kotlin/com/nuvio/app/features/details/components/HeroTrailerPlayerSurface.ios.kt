@@ -5,11 +5,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.interop.UIKitViewController
 import co.touchlab.kermit.Logger
 import com.nuvio.app.features.player.NuvioPlayerBridgeFactory
@@ -129,13 +126,9 @@ actual fun HeroTrailerPlayerSurface(
         }
     }
 
-    Box(
-        modifier = modifier.background(Color.Black),
-    ) {
-        UIKitViewController(
-            factory = { bridge.createPlayerViewController() },
-            modifier = Modifier.fillMaxSize(),
-            interactive = false,
-        )
-    }
+    UIKitViewController(
+        factory = { bridge.createPlayerViewController() },
+        modifier = modifier.fillMaxSize(),
+        interactive = false,
+    )
 }

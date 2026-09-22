@@ -1,11 +1,8 @@
 import Foundation
-import Metal
 import UIKit
-#if targetEnvironment(simulator)
 import GLKit
 import OpenGLES
 import Darwin
-#endif
 import AVFoundation
 import Libmpv
 import ComposeApp
@@ -280,7 +277,6 @@ private struct PendingLoadRequest {
     let queuedAtUptime: TimeInterval
 }
 
-#if targetEnvironment(simulator)
 private final class MpvGLView: GLKView {
     weak var playerViewController: MPVPlayerViewController?
 
@@ -288,7 +284,6 @@ private final class MpvGLView: GLKView {
         playerViewController?.renderFrame()
     }
 }
-#endif
 
 // MARK: - MPV Player View Controller
 
@@ -301,10 +296,8 @@ private enum MpvSubtitleStyle {
 final class MPVPlayerViewController: UIViewController {
 
     private static let defaultAudioOutput = "audiounit"
-#if targetEnvironment(simulator)
     private static let mpvRenderUpdateFrameFlag: UInt64 = 1
     private static let openGLESHandle = dlopen("/System/Library/Frameworks/OpenGLES.framework/OpenGLES", RTLD_LAZY)
-#endif
 
     private struct CachedNowPlayingMetadata {
         let title: String
@@ -313,7 +306,6 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     private let errorStateLock = NSLock()
-#if targetEnvironment(simulator)
     private let glContext: EAGLContext = EAGLContext(api: .openGLES3) ?? EAGLContext(api: .openGLES2)!
     private lazy var glView: MpvGLView = {
         let view = MpvGLView(frame: .zero, context: glContext)
@@ -334,10 +326,6 @@ final class MPVPlayerViewController: UIViewController {
     private var renderAttemptCount = 0
     private var successfulRenderCount = 0
     private var hasLoggedDrawableSize = false
-#else
-    private var metalLayer = MetalLayer()
-    private var lastAppliedDrawableSize: CGSize = .zero
-#endif
     private var didInitializeMpv = false
     private var externallyManagedViewSize: CGSize?
     private var pendingSurfaceLayoutWorkItems: [DispatchWorkItem] = []
@@ -402,11 +390,7 @@ final class MPVPlayerViewController: UIViewController {
     // MARK: - Lifecycle
 
     override func loadView() {
-#if targetEnvironment(simulator)
         view = glView
-#else
-        super.loadView()
-#endif
     }
 
     override func viewDidLoad() {
@@ -415,23 +399,8 @@ final class MPVPlayerViewController: UIViewController {
         view.isOpaque = true
         view.layer.masksToBounds = true
 
-#if targetEnvironment(simulator)
         view.isOpaque = true
         EAGLContext.setCurrent(glContext)
-#else
-        metalLayer.device = MTLCreateSystemDefaultDevice()
-        metalLayer.pixelFormat = .bgra8Unorm
-        metalLayer.contentsGravity = .resize
-        metalLayer.contentsScale = view.window?.screen.nativeScale ?? UIScreen.main.nativeScale
-        metalLayer.framebufferOnly = true
-        metalLayer.isOpaque = true
-        metalLayer.backgroundColor = UIColor.black.cgColor
-        metalLayer.wantsExtendedDynamicRangeContent = true
-        metalLayer.anchorPoint = CGPoint(x: 0, y: 0)
-        metalLayer.position = .zero
-        view.layer.addSublayer(metalLayer)
-        layoutMetalLayer()
-#endif
 
         setupMpv()
         activateAudioSessionForPlayback()
@@ -555,40 +524,7 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     private func layoutMetalLayer() {
-#if targetEnvironment(simulator)
         scheduleRender(force: true)
-#else
-        // #region agent log
-        if !Thread.isMainThread {
-            AgentDebugLog.emit(
-                hypothesisId: "E",
-                location: "MPVPlayerBridge.swift:layoutMetalLayer",
-                message: "layoutMetalLayer OFF-MAIN (crash candidate)",
-                data: [:]
-            )
-        }
-        // #endregion
-        let bounds = CGRect(origin: .zero, size: externallyManagedViewSize ?? view.bounds.size)
-        guard bounds.width > 1, bounds.height > 1 else { return }
-
-        let scale = view.window?.screen.nativeScale ?? UIScreen.main.nativeScale
-        let drawableSize = CGSize(
-            width: (bounds.width * scale).rounded(.toNearestOrAwayFromZero),
-            height: (bounds.height * scale).rounded(.toNearestOrAwayFromZero)
-        )
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        metalLayer.contentsScale = scale
-        metalLayer.position = .zero
-        metalLayer.bounds = CGRect(origin: .zero, size: bounds.size)
-        if drawableSize != lastAppliedDrawableSize {
-            // mpv's moltenvk context polls drawableSize and resizes its swapchain.
-            metalLayer.drawableSize = drawableSize
-            lastAppliedDrawableSize = drawableSize
-        }
-        CATransaction.commit()
-#endif
     }
 
     // MARK: - MPV Setup
@@ -602,63 +538,38 @@ final class MPVPlayerViewController: UIViewController {
 
         checkError(mpv_request_log_messages(mpv, "warn"))
 
-#if targetEnvironment(simulator)
+        // ponytail: Compose iOS draws a Metal canvas over UIKit. mpv's moltenvk
+        // CAMetalLayer never wins that compositor fight (audio-only + poster).
+        // libmpv GLES into GLKView is a normal UIView and shows through the hole.
         checkError(mpv_set_option_string(mpv, "vo", "libmpv"))
+        checkError(mpv_set_option_string(mpv, "gpu-api", "opengl"))
+        checkError(mpv_set_option_string(mpv, "opengl-es", "yes"))
+#if targetEnvironment(simulator)
         checkError(mpv_set_option_string(mpv, "hwdec", "no"))
 #else
-        var layerPointer = Int64(Int(bitPattern: Unmanaged.passUnretained(metalLayer).toOpaque()))
-        checkError(mpv_set_option(mpv, "wid", MPV_FORMAT_INT64, &layerPointer))
-        // ponytail: gpu-next + 0-size CAMetalLayer presents audio-only (same as Android).
-        checkError(mpv_set_option_string(mpv, "vo", "gpu"))
-        checkError(mpv_set_option_string(mpv, "gpu-api", "vulkan"))
-        checkError(mpv_set_option_string(mpv, "gpu-context", "moltenvk"))
-        checkError(mpv_set_option_string(mpv, "hwdec", "videotoolbox"))
+        checkError(mpv_set_option_string(mpv, "hwdec", "videotoolbox-copy"))
 #endif
         checkError(mpv_set_option_string(mpv, "vd-lavc-dr", "no"))
         checkError(mpv_set_option_string(mpv, "ao", Self.defaultAudioOutput))
         checkError(mpv_set_option_string(mpv, "audio-channels", "auto"))
         checkError(mpv_set_option_string(mpv, "audio-fallback-to-null", "yes"))
-#if !targetEnvironment(simulator)
-        checkError(mpv_set_option_string(mpv, "vulkan-swap-mode", "fifo"))
-        checkError(mpv_set_option_string(mpv, "vulkan-queue-count", "1"))
-        checkError(mpv_set_option_string(mpv, "vulkan-async-compute", "no"))
-        checkError(mpv_set_option_string(mpv, "vulkan-async-transfer", "no"))
-        checkError(mpv_set_option_string(mpv, "vulkan-disable-interop", "yes"))
-#endif
         checkError(mpv_set_option_string(mpv, "video-rotate", "no"))
         checkError(mpv_set_option_string(mpv, "subs-match-os-language", "yes"))
         checkError(mpv_set_option_string(mpv, "subs-fallback", "yes"))
         checkError(mpv_set_option_string(mpv, "keep-open", "yes"))
-#if targetEnvironment(simulator)
         checkError(mpv_set_option_string(mpv, "target-colorspace-hint", "no"))
         checkError(mpv_set_option_string(mpv, "tone-mapping", "auto"))
         checkError(mpv_set_option_string(mpv, "hdr-compute-peak", "no"))
-#else
-        checkError(mpv_set_option_string(mpv, "target-colorspace-hint", "yes"))
-        checkError(mpv_set_option_string(mpv, "tone-mapping", "auto"))
-        checkError(mpv_set_option_string(mpv, "hdr-compute-peak", "yes"))
-#endif
 
-#if targetEnvironment(simulator)
         _ = initializeMpvIfNeeded()
-#endif
     }
 
     @discardableResult
     private func initializeMpvIfNeeded() -> Bool {
         guard mpv != nil, !didInitializeMpv else { return mpv != nil && didInitializeMpv }
-#if !targetEnvironment(simulator)
-        layoutMetalLayer()
-        let drawableSize = metalLayer.drawableSize
-        guard view.window != nil, drawableSize.width > 1, drawableSize.height > 1 else {
-            return false
-        }
-#endif
         checkError(mpv_initialize(mpv))
         didInitializeMpv = true
-#if targetEnvironment(simulator)
         setupMpvRenderContext()
-#endif
         mpv_observe_property(mpv, 0, "pause", MPV_FORMAT_FLAG)
         mpv_observe_property(mpv, 0, "paused-for-cache", MPV_FORMAT_FLAG)
         mpv_observe_property(mpv, 0, "core-idle", MPV_FORMAT_FLAG)
@@ -673,7 +584,6 @@ final class MPVPlayerViewController: UIViewController {
         return true
     }
 
-#if targetEnvironment(simulator)
     private func setupMpvRenderContext() {
         guard mpv != nil else { return }
         EAGLContext.setCurrent(glContext)
@@ -850,7 +760,6 @@ final class MPVPlayerViewController: UIViewController {
             DispatchQueue.main.sync(execute: cleanup)
         }
     }
-#endif
 
     private func setupNotifications() {
         NotificationCenter.default.addObserver(self, selector: #selector(enterBackground),
@@ -861,9 +770,7 @@ final class MPVPlayerViewController: UIViewController {
 
     @objc private func enterBackground() {
         guard mpv != nil else { return }
-#if targetEnvironment(simulator)
         stopRenderPump()
-#endif
         pausePlayback()
         setStringProperty("vid", "no")
     }
@@ -871,9 +778,7 @@ final class MPVPlayerViewController: UIViewController {
     @objc private func enterForeground() {
         guard mpv != nil else { return }
         setStringProperty("vid", "auto")
-#if targetEnvironment(simulator)
         startRenderPump()
-#endif
         playPlayback()
     }
 
@@ -923,12 +828,8 @@ final class MPVPlayerViewController: UIViewController {
 
     private func startLoad(_ request: PendingLoadRequest) {
         guard mpv != nil else { return }
-#if targetEnvironment(simulator)
         startRenderPump()
         scheduleRender(force: true)
-#else
-        layoutMetalLayer()
-#endif
         clearPlaybackError()
         let sanitizedHeaders = sanitizeRequestHeaders(request.requestHeaders)
         activeRequestHeaders = sanitizedHeaders
@@ -977,16 +878,12 @@ final class MPVPlayerViewController: UIViewController {
 
     func playPlayback() {
         guard mpv != nil else { return }
-#if targetEnvironment(simulator)
         startRenderPump()
-#endif
         publishNowPlayingForPlaybackSession()
         setFlag("pause", false)
         isPlayerPlaying = true
         syncNowPlayingPlaybackState(isPlaying: true)
-#if targetEnvironment(simulator)
         scheduleRender(force: true)
-#endif
     }
 
     func pausePlayback() {
@@ -994,13 +891,11 @@ final class MPVPlayerViewController: UIViewController {
         setFlag("pause", true)
         isPlayerPlaying = false
         syncNowPlayingPlaybackState(isPlaying: false)
-#if targetEnvironment(simulator)
         scheduleRender(force: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             guard let self, self.mpv != nil, self.getFlag("pause") else { return }
             self.stopRenderPump()
         }
-#endif
     }
 
     func seekToMs(_ ms: Int64) {
@@ -1044,9 +939,6 @@ final class MPVPlayerViewController: UIViewController {
         saturation: Int,
         gamma: Int
     ) {
-#if !targetEnvironment(simulator)
-        metalLayer.wantsExtendedDynamicRangeContent = extendedDynamicRange
-#endif
         guard mpv != nil else { return }
 
 #if targetEnvironment(simulator)
@@ -1281,9 +1173,7 @@ final class MPVPlayerViewController: UIViewController {
         }
 
         NotificationCenter.default.removeObserver(self)
-#if targetEnvironment(simulator)
         stopRenderPump()
-#endif
         UIApplication.shared.endReceivingRemoteControlEvents()
         resignFirstResponder()
         pendingLoadRetryWorkItem?.cancel()
@@ -1318,20 +1208,7 @@ final class MPVPlayerViewController: UIViewController {
             setFlag("pause", true)
             setStringProperty("vid", "no")
         }
-#if !targetEnvironment(simulator)
-        // #region agent log
-        AgentDebugLog.emit(
-            hypothesisId: "D",
-            location: "MPVPlayerBridge.swift:destroyPlayer.removeLayer",
-            message: "removeFromSuperlayer on main",
-            data: [:]
-        )
-        // #endregion
-        metalLayer.removeFromSuperlayer()
-#endif
-#if targetEnvironment(simulator)
         destroyRenderContext()
-#endif
         deactivateAudioSession()
         guard let ctx = mpv else { return }
         mpv = nil  // nil first so event loop stops reading
@@ -1654,19 +1531,17 @@ final class MPVPlayerViewController: UIViewController {
                         self.clearPlaybackError()
                         self.hasLoadedCurrentFile = true
                         self.isPlayerLoading = false
-#if targetEnvironment(simulator)
                         self.startRenderPump()
-#endif
                         self.updateState()
-#if targetEnvironment(simulator)
                         self.scheduleRender(force: true)
-#endif
                         self.publishNowPlayingForPlaybackSession()
                         self.logCurrentAudioOutput()
                     }
                 case MPV_EVENT_PLAYBACK_RESTART:
                     DispatchQueue.main.async {
                         self.updateState()
+                        self.startRenderPump()
+                        self.scheduleRender(force: true)
                         self.publishNowPlayingForPlaybackSession()
                     }
                 case MPV_EVENT_END_FILE:
@@ -1678,7 +1553,6 @@ final class MPVPlayerViewController: UIViewController {
                             print("[MPV] End file error: \(errorText)")
                         }
                     }
-#if targetEnvironment(simulator)
                     DispatchQueue.main.async {
                         self.updateState()
                         self.scheduleRender(force: true)
@@ -1686,7 +1560,6 @@ final class MPVPlayerViewController: UIViewController {
                             self.stopRenderPump()
                         }
                     }
-#endif
                 case MPV_EVENT_SHUTDOWN:
                     return
                 case MPV_EVENT_LOG_MESSAGE:
