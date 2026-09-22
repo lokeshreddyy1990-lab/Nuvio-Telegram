@@ -3,26 +3,28 @@ import UIKit
 
 class MetalLayer: CAMetalLayer {
     override var drawableSize: CGSize {
-        get { return super.drawableSize }
+        get { super.drawableSize }
         set {
-            if Int(newValue.width) > 1 && Int(newValue.height) > 1 {
-                super.drawableSize = newValue
-            }
+            guard Int(newValue.width) > 1, Int(newValue.height) > 1 else { return }
+            applyOnMain { super.drawableSize = newValue }
         }
     }
 
     override var wantsExtendedDynamicRangeContent: Bool {
-        get { return super.wantsExtendedDynamicRangeContent }
+        get { super.wantsExtendedDynamicRangeContent }
         set {
-            if Thread.isMainThread {
-                super.wantsExtendedDynamicRangeContent = newValue
-            } else {
-                // mpv's vo thread sets this during video-output init while it holds the
-                // core lock; a sync hop here deadlocks against main-thread property reads.
-                DispatchQueue.main.async {
-                    super.wantsExtendedDynamicRangeContent = newValue
-                }
-            }
+            applyOnMain { super.wantsExtendedDynamicRangeContent = newValue }
+        }
+    }
+
+    /// mpv's vo thread mutates CAMetalLayer during init/teardown while holding the
+    /// core lock; a sync hop deadlocks against main-thread property reads, and
+    /// writing layer props off-main trips Auto Layout ("layout engine" crash).
+    private func applyOnMain(_ body: @escaping () -> Void) {
+        if Thread.isMainThread {
+            body()
+        } else {
+            DispatchQueue.main.async(execute: body)
         }
     }
 }

@@ -204,8 +204,17 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     func getErrorMessage() -> String { playerVC?.currentErrorMessage ?? "" }
 
     func destroy() {
-        playerVC?.destroyPlayer()
-        playerVC = nil
+        let teardown = { [weak self] in
+            guard let self else { return }
+            self.playerVC?.destroyPlayer()
+            self.playerVC = nil
+        }
+        if Thread.isMainThread {
+            teardown()
+        } else {
+            // Compose dispose is normally main; sync so teardown finishes before callers proceed.
+            DispatchQueue.main.sync(execute: teardown)
+        }
     }
 
     private func parseRequestHeaders(_ headersJson: String?) -> [String: String] {
@@ -1185,6 +1194,13 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     func destroyPlayer() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.sync { [weak self] in
+                self?.destroyPlayer()
+            }
+            return
+        }
+
         NotificationCenter.default.removeObserver(self)
 #if targetEnvironment(simulator)
         stopRenderPump()
@@ -1198,6 +1214,17 @@ final class MPVPlayerViewController: UIViewController {
         pendingLoadRequest = nil
         nowPlayingController.invalidate()
         clearPlaybackError()
+
+        // Stop VO before detaching the Metal surface so mpv's render thread cannot
+        // present / mutate CAMetalLayer while Compose tears down UIKit interop and
+        // home/tab layout runs on main (Auto Layout off-main crash on player back).
+        if mpv != nil {
+            setFlag("pause", true)
+            setStringProperty("vid", "no")
+        }
+#if !targetEnvironment(simulator)
+        metalLayer.removeFromSuperlayer()
+#endif
 #if targetEnvironment(simulator)
         destroyRenderContext()
 #endif
