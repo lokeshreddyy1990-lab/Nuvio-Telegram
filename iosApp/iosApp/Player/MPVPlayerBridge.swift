@@ -204,8 +204,24 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     func getErrorMessage() -> String { playerVC?.currentErrorMessage ?? "" }
 
     func destroy() {
+        // #region agent log
+        AgentDebugLog.emit(
+            hypothesisId: "B",
+            location: "MPVPlayerBridge.swift:destroy",
+            message: "bridge.destroy entered",
+            data: ["willSyncToMain": !Thread.isMainThread]
+        )
+        // #endregion
         let teardown = { [weak self] in
             guard let self else { return }
+            // #region agent log
+            AgentDebugLog.emit(
+                hypothesisId: "B",
+                location: "MPVPlayerBridge.swift:destroy.teardown",
+                message: "bridge.destroy teardown running",
+                data: [:]
+            )
+            // #endregion
             self.playerVC?.destroyPlayer()
             self.playerVC = nil
         }
@@ -478,6 +494,20 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     private func syncVideoSurfaceLayoutNow(size: CGSize? = nil, scheduleDeferredPasses: Bool) {
+        // #region agent log
+        if !Thread.isMainThread {
+            AgentDebugLog.emit(
+                hypothesisId: "C",
+                location: "MPVPlayerBridge.swift:syncVideoSurfaceLayoutNow",
+                message: "layout sync OFF-MAIN (crash candidate)",
+                data: [
+                    "hasSize": size != nil,
+                    "scheduleDeferred": scheduleDeferredPasses,
+                    "isViewLoaded": isViewLoaded,
+                ]
+            )
+        }
+        // #endregion
         guard isViewLoaded else { return }
         if let size, size.width > 1, size.height > 1 {
             externallyManagedViewSize = size
@@ -522,6 +552,16 @@ final class MPVPlayerViewController: UIViewController {
 #if targetEnvironment(simulator)
         scheduleRender(force: true)
 #else
+        // #region agent log
+        if !Thread.isMainThread {
+            AgentDebugLog.emit(
+                hypothesisId: "E",
+                location: "MPVPlayerBridge.swift:layoutMetalLayer",
+                message: "layoutMetalLayer OFF-MAIN (crash candidate)",
+                data: [:]
+            )
+        }
+        // #endregion
         let bounds = CGRect(origin: .zero, size: externallyManagedViewSize ?? view.bounds.size)
         guard bounds.width > 1, bounds.height > 1 else { return }
 
@@ -1196,6 +1236,17 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     func destroyPlayer() {
+        // #region agent log
+        AgentDebugLog.emit(
+            hypothesisId: "B",
+            location: "MPVPlayerBridge.swift:destroyPlayer",
+            message: "destroyPlayer entered",
+            data: [
+                "hasMpv": mpv != nil,
+                "pendingLayoutItems": pendingSurfaceLayoutWorkItems.count,
+            ]
+        )
+        // #endregion
         if !Thread.isMainThread {
             DispatchQueue.main.sync { [weak self] in
                 self?.destroyPlayer()
@@ -1211,6 +1262,14 @@ final class MPVPlayerViewController: UIViewController {
         resignFirstResponder()
         pendingLoadRetryWorkItem?.cancel()
         pendingLoadRetryWorkItem = nil
+        // #region agent log
+        AgentDebugLog.emit(
+            hypothesisId: "C",
+            location: "MPVPlayerBridge.swift:destroyPlayer.cancelDeferred",
+            message: "cancelling deferred surface layout passes",
+            data: ["count": pendingSurfaceLayoutWorkItems.count]
+        )
+        // #endregion
         pendingSurfaceLayoutWorkItems.forEach { $0.cancel() }
         pendingSurfaceLayoutWorkItems.removeAll(keepingCapacity: false)
         pendingLoadRequest = nil
@@ -1221,10 +1280,26 @@ final class MPVPlayerViewController: UIViewController {
         // present / mutate CAMetalLayer while Compose tears down UIKit interop and
         // home/tab layout runs on main (Auto Layout off-main crash on player back).
         if mpv != nil {
+            // #region agent log
+            AgentDebugLog.emit(
+                hypothesisId: "D",
+                location: "MPVPlayerBridge.swift:destroyPlayer.stopVo",
+                message: "pause + vid=no before detach",
+                data: [:]
+            )
+            // #endregion
             setFlag("pause", true)
             setStringProperty("vid", "no")
         }
 #if !targetEnvironment(simulator)
+        // #region agent log
+        AgentDebugLog.emit(
+            hypothesisId: "D",
+            location: "MPVPlayerBridge.swift:destroyPlayer.removeLayer",
+            message: "removeFromSuperlayer on main",
+            data: [:]
+        )
+        // #endregion
         metalLayer.removeFromSuperlayer()
 #endif
 #if targetEnvironment(simulator)
@@ -1233,7 +1308,23 @@ final class MPVPlayerViewController: UIViewController {
         deactivateAudioSession()
         guard let ctx = mpv else { return }
         mpv = nil  // nil first so event loop stops reading
+        // #region agent log
+        AgentDebugLog.emit(
+            hypothesisId: "D",
+            location: "MPVPlayerBridge.swift:destroyPlayer.terminate",
+            message: "mpv_terminate_destroy starting",
+            data: [:]
+        )
+        // #endregion
         mpv_terminate_destroy(ctx)
+        // #region agent log
+        AgentDebugLog.emit(
+            hypothesisId: "D",
+            location: "MPVPlayerBridge.swift:destroyPlayer.terminated",
+            message: "mpv_terminate_destroy finished",
+            data: [:]
+        )
+        // #endregion
     }
 
     private func activateAudioSessionForPlayback() {

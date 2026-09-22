@@ -348,6 +348,15 @@ actual fun PlatformPlayerSurface(
     // Cleanup
     DisposableEffect(bridge) {
         onDispose {
+            // #region agent log
+            runCatching {
+                val isMain = platform.Foundation.NSThread.isMainThread
+                platform.Foundation.NSLog(
+                    "[agent-debug] session=ba4530 hyp=B loc=PlayerEngine.ios.kt:onDispose msg=Compose onDispose before bridge.destroy isMainThread=%@",
+                    if (isMain) "true" else "false",
+                )
+            }
+            // #endregion
             bridge.destroy()
         }
     }
