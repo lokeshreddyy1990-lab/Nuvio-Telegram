@@ -1181,6 +1181,8 @@ final class MPVPlayerViewController: UIViewController {
         setStringProperty("sub-bold", bold ? "yes" : "no")
         if let fontDirectory, !fontDirectory.isEmpty {
             checkError(mpv_set_property_string(mpv, "sub-fonts-dir", fontDirectory))
+        } else {
+            checkError(mpv_set_property_string(mpv, "sub-fonts-dir", ""))
         }
         checkError(mpv_set_property_string(mpv, "sub-font", fontFamily))
 

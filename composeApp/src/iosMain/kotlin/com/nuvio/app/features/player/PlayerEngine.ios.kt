@@ -460,7 +460,11 @@ private fun SubtitleFontFamily.toIosMpvSubtitleFont(): String =
 
 private fun SubtitleStyleState.toIosMpvSubtitleFont(): String =
     if (fontFamily == SubtitleFontFamily.Custom) {
-        customFontName?.takeIf { it.isNotBlank() } ?: "Helvetica Neue"
+        customFontPath
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::resolveSubtitleFontFamilyName)
+            ?: customFontName?.takeIf { it.isNotBlank() }
+            ?: "Helvetica Neue"
     } else {
         fontFamily.toIosMpvSubtitleFont()
     }
