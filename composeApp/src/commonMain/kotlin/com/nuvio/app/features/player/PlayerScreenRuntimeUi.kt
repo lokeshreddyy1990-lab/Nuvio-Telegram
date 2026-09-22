@@ -400,7 +400,6 @@ private fun BoxScope.RenderPlaybackOverlays(
         showOpeningOverlay = playerSettingsUiState.showLoadingOverlay &&
             !initialLoadCompleted &&
             !playbackSnapshot.isPlaying &&
-            playbackSnapshot.durationMs <= 0L &&
             playbackSnapshot.positionMs <= 0L &&
             errorMessage == null,
         backdropArtwork = background ?: poster,

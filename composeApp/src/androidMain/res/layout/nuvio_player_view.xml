@@ -5,5 +5,5 @@
     android:layout_height="match_parent"
     app:use_controller="false"
     app:use_artwork="false"
-    app:surface_type="texture_view"
+    app:surface_type="surface_view"
     app:shutter_background_color="@android:color/black" />

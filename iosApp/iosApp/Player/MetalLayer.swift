@@ -1,6 +1,76 @@
 import Foundation
 import UIKit
 
+class MetalLayer: CAMetalLayer {
+    override var drawableSize: CGSize {
+        get { super.drawableSize }
+        set {
+            guard Int(newValue.width) > 1, Int(newValue.height) > 1 else { return }
+            // #region agent log
+            if !Thread.isMainThread {
+                AgentDebugLog.emit(
+                    hypothesisId: "A",
+                    location: "MetalLayer.swift:drawableSize",
+                    message: "drawableSize set off-main (marshalled async)",
+                    data: ["w": newValue.width, "h": newValue.height]
+                )
+            }
+            // #endregion
+            applyOnMain { super.drawableSize = newValue }
+        }
+    }
+
+    override var wantsExtendedDynamicRangeContent: Bool {
+        get { super.wantsExtendedDynamicRangeContent }
+        set {
+            // #region agent log
+            if !Thread.isMainThread {
+                AgentDebugLog.emit(
+                    hypothesisId: "A",
+                    location: "MetalLayer.swift:edr",
+                    message: "wantsEDR set off-main (marshalled async)",
+                    data: ["value": newValue]
+                )
+            }
+            // #endregion
+            applyOnMain { super.wantsExtendedDynamicRangeContent = newValue }
+        }
+    }
+
+    override var bounds: CGRect {
+        get { super.bounds }
+        set {
+            applyOnMain { super.bounds = newValue }
+        }
+    }
+
+    override var contentsScale: CGFloat {
+        get { super.contentsScale }
+        set {
+            applyOnMain { super.contentsScale = newValue }
+        }
+    }
+
+    override var position: CGPoint {
+        get { super.position }
+        set {
+            applyOnMain { super.position = newValue }
+        }
+    }
+
+    /// mpv's vo thread mutates CAMetalLayer during init/teardown while holding the
+    /// core lock; a sync hop deadlocks against main-thread property reads, and
+    /// writing layer props off-main trips Auto Layout ("layout engine" crash).
+    private func applyOnMain(_ body: @escaping () -> Void) {
+        if Thread.isMainThread {
+            body()
+        } else {
+            DispatchQueue.main.async(execute: body)
+        }
+    }
+}
+
+// #region agent log
 enum AgentDebugLog {
     static func emit(
         hypothesisId: String,

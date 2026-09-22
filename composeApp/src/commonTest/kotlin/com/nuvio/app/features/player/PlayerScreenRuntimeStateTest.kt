@@ -45,7 +45,9 @@ class PlayerScreenRuntimeStateTest {
         assertTrue(PlayerPlaybackSnapshot(isLoading = false).marksInitialLoadComplete())
         assertTrue(PlayerPlaybackSnapshot(isLoading = true, isPlaying = true).marksInitialLoadComplete())
         assertTrue(PlayerPlaybackSnapshot(isLoading = true, positionMs = 1_000L).marksInitialLoadComplete())
-        assertTrue(PlayerPlaybackSnapshot(isLoading = true, durationMs = 90_000L).marksInitialLoadComplete())
+        // Duration alone must not clear the loading/poster overlay — audio metadata can
+        // arrive while the video surface is still zero-sized (audio-only + stuck poster).
+        assertFalse(PlayerPlaybackSnapshot(isLoading = true, durationMs = 90_000L).marksInitialLoadComplete())
         assertTrue(PlayerPlaybackSnapshot(isLoading = true, videoWidth = 1920, videoHeight = 1080).marksInitialLoadComplete())
     }
 

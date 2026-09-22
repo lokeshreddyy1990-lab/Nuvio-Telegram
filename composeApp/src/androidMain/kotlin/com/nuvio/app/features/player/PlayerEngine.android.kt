@@ -971,7 +971,7 @@ private fun ExoPlayerSurface(
                 this.resizeMode = resizeMode.toExoResizeMode()
                 setShutterBackgroundColor(android.graphics.Color.BLACK)
                 setUseArtwork(false)
-                setKeepContentOnPlayerReset(true)
+                setKeepContentOnPlayerReset(false)
                 playerViewRef = this
                 sidecarController.bindSubtitleView(this.subtitleView)
                 syncLibassOverlay(
