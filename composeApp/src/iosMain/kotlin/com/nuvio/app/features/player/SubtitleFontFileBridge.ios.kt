@@ -12,7 +12,6 @@ import platform.UIKit.UIDocumentPickerDelegateProtocol
 import platform.UIKit.UIDocumentPickerMode
 import platform.UIKit.UIDocumentPickerViewController
 import platform.UIKit.UIViewController
-import platform.UIKit.UIWindow
 import platform.darwin.NSObject
 import platform.posix.SEEK_END
 import platform.posix.SEEK_SET
@@ -55,23 +54,7 @@ internal actual object SubtitleFontFileBridge {
     }
 
     private fun topViewController(): UIViewController? {
-        val app = UIApplication.sharedApplication
-        @Suppress("DEPRECATION")
-        val windows = app.windows
-        var controller: UIViewController? = null
-        for (index in 0 until windows.size) {
-            val window = windows.objectAtIndex(index) as? UIWindow ?: continue
-            if (window.isKeyWindow) {
-                controller = window.rootViewController
-                break
-            }
-        }
-        if (controller == null) {
-            controller = (windows.firstObject as? UIWindow)?.rootViewController
-        }
-        if (controller == null) {
-            controller = app.keyWindow?.rootViewController
-        }
+        var controller = UIApplication.sharedApplication.keyWindow?.rootViewController
         while (controller?.presentedViewController != null) {
             controller = controller.presentedViewController
         }
