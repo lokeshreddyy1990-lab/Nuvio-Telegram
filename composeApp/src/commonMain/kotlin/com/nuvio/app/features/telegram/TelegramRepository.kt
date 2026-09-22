@@ -62,6 +62,7 @@ object TelegramRepository {
 
     private var initializationJob: Job? = null
     private var initialized = false
+    private var coldStartCacheCleared = false
 
     fun ensureLoaded() {
         if (initialized) return
@@ -84,9 +85,20 @@ object TelegramRepository {
                         errorMessage = "TDLib could not be started",
                     )
                 }
-                else -> pollAuthorizationState()
+                else -> {
+                    clearDownloadedCacheOnColdStart()
+                    pollAuthorizationState()
+                }
             }
         }
+    }
+
+    /** Once per process, right after TDLib starts — not on foreground/background. */
+    private fun clearDownloadedCacheOnColdStart() {
+        if (coldStartCacheCleared) return
+        coldStartCacheCleared = true
+        TelegramPlatformClient.clearCache()
+        _uiState.value = _uiState.value.copy(cacheSizeBytes = TelegramPlatformClient.cacheSizeBytes())
     }
 
     fun submitPhoneNumber(phoneNumber: String) = submitAuthenticationRequest(
