@@ -40,51 +40,21 @@ class MetalLayer: CAMetalLayer {
     override var bounds: CGRect {
         get { super.bounds }
         set {
-            // #region agent log
-            if !Thread.isMainThread {
-                AgentDebugLog.emit(
-                    hypothesisId: "A",
-                    location: "MetalLayer.swift:bounds",
-                    message: "bounds set OFF-MAIN (unmarshalled — crash candidate)",
-                    data: ["w": newValue.width, "h": newValue.height]
-                )
-            }
-            // #endregion
-            super.bounds = newValue
+            applyOnMain { super.bounds = newValue }
         }
     }
 
     override var contentsScale: CGFloat {
         get { super.contentsScale }
         set {
-            // #region agent log
-            if !Thread.isMainThread {
-                AgentDebugLog.emit(
-                    hypothesisId: "A",
-                    location: "MetalLayer.swift:contentsScale",
-                    message: "contentsScale set OFF-MAIN (unmarshalled — crash candidate)",
-                    data: ["scale": Double(newValue)]
-                )
-            }
-            // #endregion
-            super.contentsScale = newValue
+            applyOnMain { super.contentsScale = newValue }
         }
     }
 
     override var position: CGPoint {
         get { super.position }
         set {
-            // #region agent log
-            if !Thread.isMainThread {
-                AgentDebugLog.emit(
-                    hypothesisId: "A",
-                    location: "MetalLayer.swift:position",
-                    message: "position set OFF-MAIN (unmarshalled — crash candidate)",
-                    data: ["x": newValue.x, "y": newValue.y]
-                )
-            }
-            // #endregion
-            super.position = newValue
+            applyOnMain { super.position = newValue }
         }
     }
 

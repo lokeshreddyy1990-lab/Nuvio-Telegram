@@ -1,4 +1,5 @@
 import Foundation
+import Metal
 import UIKit
 #if targetEnvironment(simulator)
 import GLKit
@@ -337,6 +338,7 @@ final class MPVPlayerViewController: UIViewController {
     private var metalLayer = MetalLayer()
     private var lastAppliedDrawableSize: CGSize = .zero
 #endif
+    private var didInitializeMpv = false
     private var externallyManagedViewSize: CGSize?
     private var pendingSurfaceLayoutWorkItems: [DispatchWorkItem] = []
     private var pendingLoadRequest: PendingLoadRequest?
@@ -417,6 +419,8 @@ final class MPVPlayerViewController: UIViewController {
         view.isOpaque = true
         EAGLContext.setCurrent(glContext)
 #else
+        metalLayer.device = MTLCreateSystemDefaultDevice()
+        metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.contentsGravity = .resize
         metalLayer.contentsScale = view.window?.screen.nativeScale ?? UIScreen.main.nativeScale
         metalLayer.framebufferOnly = true
@@ -604,7 +608,8 @@ final class MPVPlayerViewController: UIViewController {
 #else
         var layerPointer = Int64(Int(bitPattern: Unmanaged.passUnretained(metalLayer).toOpaque()))
         checkError(mpv_set_option(mpv, "wid", MPV_FORMAT_INT64, &layerPointer))
-        checkError(mpv_set_option_string(mpv, "vo", "gpu-next"))
+        // ponytail: gpu-next + 0-size CAMetalLayer presents audio-only (same as Android).
+        checkError(mpv_set_option_string(mpv, "vo", "gpu"))
         checkError(mpv_set_option_string(mpv, "gpu-api", "vulkan"))
         checkError(mpv_set_option_string(mpv, "gpu-context", "moltenvk"))
         checkError(mpv_set_option_string(mpv, "hwdec", "videotoolbox"))
@@ -634,12 +639,26 @@ final class MPVPlayerViewController: UIViewController {
         checkError(mpv_set_option_string(mpv, "hdr-compute-peak", "yes"))
 #endif
 
+#if targetEnvironment(simulator)
+        _ = initializeMpvIfNeeded()
+#endif
+    }
+
+    @discardableResult
+    private func initializeMpvIfNeeded() -> Bool {
+        guard mpv != nil, !didInitializeMpv else { return mpv != nil && didInitializeMpv }
+#if !targetEnvironment(simulator)
+        layoutMetalLayer()
+        let drawableSize = metalLayer.drawableSize
+        guard view.window != nil, drawableSize.width > 1, drawableSize.height > 1 else {
+            return false
+        }
+#endif
         checkError(mpv_initialize(mpv))
+        didInitializeMpv = true
 #if targetEnvironment(simulator)
         setupMpvRenderContext()
 #endif
-
-        // Observe properties
         mpv_observe_property(mpv, 0, "pause", MPV_FORMAT_FLAG)
         mpv_observe_property(mpv, 0, "paused-for-cache", MPV_FORMAT_FLAG)
         mpv_observe_property(mpv, 0, "core-idle", MPV_FORMAT_FLAG)
@@ -651,6 +670,7 @@ final class MPVPlayerViewController: UIViewController {
             let vc = unsafeBitCast(ctx, to: MPVPlayerViewController.self)
             vc.readEvents()
         }, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()))
+        return true
     }
 
 #if targetEnvironment(simulator)
@@ -886,6 +906,10 @@ final class MPVPlayerViewController: UIViewController {
         guard let request = pendingLoadRequest else { return }
         guard mpv != nil else { return }
         layoutMetalLayer()
+        guard initializeMpvIfNeeded() else {
+            schedulePendingLoadRetry()
+            return
+        }
         guard isViewportReadyForPlayback(queuedAtUptime: request.queuedAtUptime) else {
             schedulePendingLoadRetry()
             return
@@ -1275,6 +1299,7 @@ final class MPVPlayerViewController: UIViewController {
         pendingSurfaceLayoutWorkItems.forEach { $0.cancel() }
         pendingSurfaceLayoutWorkItems.removeAll(keepingCapacity: false)
         pendingLoadRequest = nil
+        didInitializeMpv = false
         nowPlayingController.invalidate()
         clearPlaybackError()
 

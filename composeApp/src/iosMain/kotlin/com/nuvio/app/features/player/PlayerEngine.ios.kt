@@ -324,22 +324,26 @@ actual fun PlatformPlayerSurface(
     LaunchedEffect(bridge) {
         var lastReportedError: String? = null
         while (isActive) {
-            val snapshot = PlayerPlaybackSnapshot(
-                isLoading = bridge.getIsLoading(),
-                isPlaying = bridge.getIsPlaying(),
-                isEnded = bridge.getIsEnded(),
-                durationMs = bridge.getDurationMs(),
-                positionMs = bridge.getPositionMs(),
-                bufferedPositionMs = bridge.getBufferedMs(),
-                playbackSpeed = bridge.getPlaybackSpeed(),
-                videoWidth = bridge.getVideoWidth().takeIf { it > 0 },
-                videoHeight = bridge.getVideoHeight().takeIf { it > 0 },
-            )
-            latestOnSnapshot.value(snapshot)
-            val errorMessage = bridge.getErrorMessage().ifBlank { null }
-            if (errorMessage != lastReportedError) {
-                lastReportedError = errorMessage
-                latestOnError.value(errorMessage)
+            runCatching {
+                val snapshot = PlayerPlaybackSnapshot(
+                    isLoading = bridge.getIsLoading(),
+                    isPlaying = bridge.getIsPlaying(),
+                    isEnded = bridge.getIsEnded(),
+                    durationMs = bridge.getDurationMs(),
+                    positionMs = bridge.getPositionMs(),
+                    bufferedPositionMs = bridge.getBufferedMs(),
+                    playbackSpeed = bridge.getPlaybackSpeed(),
+                    videoWidth = bridge.getVideoWidth().takeIf { it > 0 },
+                    videoHeight = bridge.getVideoHeight().takeIf { it > 0 },
+                )
+                latestOnSnapshot.value(snapshot)
+                val errorMessage = bridge.getErrorMessage().ifBlank { null }
+                if (errorMessage != lastReportedError) {
+                    lastReportedError = errorMessage
+                    latestOnError.value(errorMessage)
+                }
+            }.onFailure { error ->
+                Logger.w(TAG, error) { "iOS playback snapshot poll failed" }
             }
             delay(250L)
         }
