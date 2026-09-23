@@ -504,6 +504,13 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     private func syncVideoSurfaceLayoutNow(size: CGSize? = nil, scheduleDeferredPasses: Bool) {
+        // Ensure all layout modifications happen on main thread
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.syncVideoSurfaceLayoutNow(size: size, scheduleDeferredPasses: scheduleDeferredPasses)
+            }
+            return
+        }
         guard isViewLoaded else { return }
         if let size, size.width > 1, size.height > 1 {
             externallyManagedViewSize = size
@@ -532,6 +539,13 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     private func applyExternallyManagedViewSize(_ size: CGSize) {
+        // Ensure view property modifications happen on main thread
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.applyExternallyManagedViewSize(size)
+            }
+            return
+        }
         let targetBounds = CGRect(origin: .zero, size: size)
         if view.bounds != targetBounds {
             view.bounds = targetBounds
@@ -545,6 +559,13 @@ final class MPVPlayerViewController: UIViewController {
     }
 
     private func layoutMetalLayer() {
+        // Ensure layer property modifications happen on main thread
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.layoutMetalLayer()
+            }
+            return
+        }
 #if targetEnvironment(simulator)
         scheduleRender(force: true)
 #else

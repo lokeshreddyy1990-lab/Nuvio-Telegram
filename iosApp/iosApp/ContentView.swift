@@ -595,6 +595,13 @@ final class RootComposeViewController: UIViewController, UITabBarDelegate {
     }
 
     private func updateTabBarHeight() {
+        // Ensure all layout modifications happen on main thread
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.updateTabBarHeight()
+            }
+            return
+        }
         tabBarHeightConstraint?.constant = tabBarHeight
         updateProfileTabTouchOverlayFrame()
     }

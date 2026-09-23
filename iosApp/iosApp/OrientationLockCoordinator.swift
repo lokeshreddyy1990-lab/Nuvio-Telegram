@@ -124,6 +124,8 @@ final class OrientationLockCoordinator {
 
     private func refreshRootLayoutsAfterOrientationUnlock() {
         let refresh: () -> Void = {
+            // Ensure we're on main thread before modifying layouts
+            guard Thread.isMainThread else { return }
             UIApplication.shared.connectedScenes
                 .compactMap { $0 as? UIWindowScene }
                 .flatMap(\.windows)
