@@ -26,6 +26,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
     parentMetaId: String,
     parentMetaType: String,
     contentType: String?,
+    searchTitle: String?,
     settings: PlayerSettingsUiState,
     currentProviderAddonId: String?,
     currentProviderName: String?,
@@ -110,6 +111,7 @@ internal fun CoroutineScope.launchPlayerNextEpisodeAutoPlay(
             parentMetaType = parentMetaType,
             season = nextVideo.season,
             episode = nextVideo.episode,
+            searchTitle = searchTitle,
         )
 
         val installedAddonNames = AddonRepository.uiState.value.addons

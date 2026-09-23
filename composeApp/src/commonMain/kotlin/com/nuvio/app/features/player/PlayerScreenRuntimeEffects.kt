@@ -599,6 +599,7 @@ internal fun PlayerScreenRuntime.tryRefreshCredentialedSourceAfterError(message:
             videoId = currentVideoId,
             season = season,
             episode = episode,
+            searchTitle = title,
             forceRefresh = true,
         )
 

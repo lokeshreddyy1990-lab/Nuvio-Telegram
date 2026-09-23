@@ -1,6 +1,7 @@
 package com.nuvio.app.features.telegram
 
 import com.nuvio.app.core.build.AppVersionConfig
+import com.nuvio.app.features.streams.AddonStreamGroup
 import com.nuvio.app.features.streams.StreamBehaviorHints
 import com.nuvio.app.features.streams.StreamItem
 import kotlinx.coroutines.CoroutineScope
@@ -453,7 +454,34 @@ object TelegramRepository {
 }
 
 const val TELEGRAM_ADDON_ID = "telegram"
+internal const val TELEGRAM_ADDON_NAME = "Telegram"
 private const val SPLIT_SCAN_WINDOW = 20L
+
+internal fun resolveTelegramSearchTitle(searchTitle: String?, fallbackTitle: String?): String? =
+    searchTitle?.trim()?.takeIf { it.isNotEmpty() }
+        ?: fallbackTitle?.trim()?.takeIf { it.isNotEmpty() }
+
+internal fun telegramLoadingStreamGroup(): AddonStreamGroup = AddonStreamGroup(
+    addonName = TELEGRAM_ADDON_NAME,
+    addonId = TELEGRAM_ADDON_ID,
+    streams = emptyList(),
+    isLoading = true,
+)
+
+internal fun telegramStreamGroup(streams: List<StreamItem>): AddonStreamGroup = AddonStreamGroup(
+    addonName = TELEGRAM_ADDON_NAME,
+    addonId = TELEGRAM_ADDON_ID,
+    streams = streams,
+    isLoading = false,
+)
+
+internal fun telegramErrorStreamGroup(message: String?): AddonStreamGroup = AddonStreamGroup(
+    addonName = TELEGRAM_ADDON_NAME,
+    addonId = TELEGRAM_ADDON_ID,
+    streams = emptyList(),
+    isLoading = false,
+    error = message,
+)
 
 private data class TelegramHit(
     val chatId: Long,

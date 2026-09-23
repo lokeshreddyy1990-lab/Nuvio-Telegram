@@ -19,8 +19,10 @@ import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.plugins.pluginContentId
 import com.nuvio.app.features.plugins.PluginsUiState
 import com.nuvio.app.features.plugins.isExcludedByPluginQualityFilter
-import com.nuvio.app.features.telegram.TELEGRAM_ADDON_ID
 import com.nuvio.app.features.telegram.TelegramRepository
+import com.nuvio.app.features.telegram.telegramErrorStreamGroup
+import com.nuvio.app.features.telegram.telegramLoadingStreamGroup
+import com.nuvio.app.features.telegram.telegramStreamGroup
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -382,14 +384,7 @@ object StreamsRepository {
                 isLoading = true,
             )
         } + if (telegramAvailable) {
-            listOf(
-                AddonStreamGroup(
-                    addonName = "Telegram",
-                    addonId = TELEGRAM_ADDON_ID,
-                    streams = emptyList(),
-                    isLoading = true,
-                ),
-            )
+            listOf(telegramLoadingStreamGroup())
         } else {
             emptyList()
         }, installedAddonOrder)
@@ -748,23 +743,8 @@ object StreamsRepository {
                             episode = episode,
                         )
                     }.fold(
-                        onSuccess = { streams ->
-                            AddonStreamGroup(
-                                addonName = "Telegram",
-                                addonId = TELEGRAM_ADDON_ID,
-                                streams = streams,
-                                isLoading = false,
-                            )
-                        },
-                        onFailure = { error ->
-                            AddonStreamGroup(
-                                addonName = "Telegram",
-                                addonId = TELEGRAM_ADDON_ID,
-                                streams = emptyList(),
-                                isLoading = false,
-                                error = error.message,
-                            )
-                        },
+                        onSuccess = { streams -> telegramStreamGroup(streams) },
+                        onFailure = { error -> telegramErrorStreamGroup(error.message) },
                     )
                     publishCompletion(StreamLoadCompletion.Addon(telegramGroup))
                 }

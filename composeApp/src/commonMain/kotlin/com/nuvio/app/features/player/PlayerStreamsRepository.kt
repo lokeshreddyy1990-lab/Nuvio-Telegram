@@ -36,6 +36,11 @@ import com.nuvio.app.features.streams.streamAddonInstanceId
 import com.nuvio.app.features.streams.toEmptyStateReason
 import com.nuvio.app.features.streams.toPluginProviderGroups
 import com.nuvio.app.features.streams.toStreamItem
+import com.nuvio.app.features.telegram.TelegramRepository
+import com.nuvio.app.features.telegram.resolveTelegramSearchTitle
+import com.nuvio.app.features.telegram.telegramErrorStreamGroup
+import com.nuvio.app.features.telegram.telegramLoadingStreamGroup
+import com.nuvio.app.features.telegram.telegramStreamGroup
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -168,6 +173,12 @@ object PlayerStreamsRepository {
         } else {
             PluginsUiState(pluginsEnabled = false)
         }
+        TelegramRepository.ensureLoaded()
+        val telegramTitle = resolveTelegramSearchTitle(
+            searchTitle = searchTitle,
+            fallbackTitle = MetaDetailsRepository.uiState.value.meta?.name,
+        )
+        val telegramAvailable = TelegramRepository.uiState.value.isConnected && !telegramTitle.isNullOrBlank()
         val cloudStreamSearchRequest = buildCloudStreamSearchRequest(
             type = type,
             videoId = videoId,
@@ -189,7 +200,8 @@ object PlayerStreamsRepository {
         }
         val requestKey = "$type::$videoId::$season::$episode::parent=$parentMetaType:$parentMetaId" +
             "::pluginsGrouped=${pluginUiState.groupStreamsByRepository}" +
-            "::cloudstream=$cloudStreamRegistryRevision::cloudTarget=${cloudStreamSearchRequest?.cacheKey.orEmpty()}"
+            "::cloudstream=$cloudStreamRegistryRevision::cloudTarget=${cloudStreamSearchRequest?.cacheKey.orEmpty()}" +
+            "::telegram=$telegramAvailable"
         val current = stateFlow.value
         if (
             !forceRefresh &&
@@ -308,7 +320,7 @@ object PlayerStreamsRepository {
             groupByRepository = pluginUiState.groupStreamsByRepository,
         )
 
-        if (installedAddons.isEmpty() && pluginProviderGroups.isEmpty() && cloudStreamProviderGroups.isEmpty()) {
+        if (installedAddons.isEmpty() && pluginProviderGroups.isEmpty() && cloudStreamProviderGroups.isEmpty() && !telegramAvailable) {
             stateFlow.value = StreamsUiState(
                 isAnyLoading = false,
                 emptyStateReason = com.nuvio.app.features.streams.StreamsEmptyStateReason.NoAddonsInstalled,
@@ -334,7 +346,7 @@ object PlayerStreamsRepository {
                 )
             }
 
-        if (streamAddons.isEmpty() && pluginProviderGroups.isEmpty() && cloudStreamProviderGroups.isEmpty()) {
+        if (streamAddons.isEmpty() && pluginProviderGroups.isEmpty() && cloudStreamProviderGroups.isEmpty() && !telegramAvailable) {
             stateFlow.value = StreamsUiState(
                 isAnyLoading = false,
                 emptyStateReason = com.nuvio.app.features.streams.StreamsEmptyStateReason.NoCompatibleAddons,
@@ -364,6 +376,10 @@ object PlayerStreamsRepository {
                 streams = emptyList(),
                 isLoading = true,
             )
+        } + if (telegramAvailable) {
+            listOf(telegramLoadingStreamGroup())
+        } else {
+            emptyList()
         }, installedAddonOrder)
         val isInitiallyLoading = initialGroups.any { it.isLoading }
         stateFlow.value = StreamsUiState(
@@ -381,7 +397,8 @@ object PlayerStreamsRepository {
             val pluginFirstErrorByAddonId = mutableMapOf<String, String>()
             val totalTasks = streamAddons.size +
                 pluginProviderGroups.sumOf { it.scrapers.size } +
-                cloudStreamProviderGroups.size
+                cloudStreamProviderGroups.size +
+                if (telegramAvailable) 1 else 0
             val completions = Channel<StreamLoadCompletion>(capacity = Channel.BUFFERED)
             val debridAvailabilityJobs = mutableListOf<Job>()
             val cloudStreamSemaphore = Semaphore(PLAYER_CLOUDSTREAM_STREAM_PROVIDER_CONCURRENCY)
@@ -545,6 +562,25 @@ object PlayerStreamsRepository {
                 }
             }
 
+            if (telegramAvailable) {
+                launch {
+                    val outcome = withTimeoutOrNull(PLAYER_TELEGRAM_STREAM_TIMEOUT_MS) {
+                        runCatchingUnlessCancelled {
+                            TelegramRepository.searchStreams(
+                                title = telegramTitle.orEmpty(),
+                                season = season,
+                                episode = episode,
+                            )
+                        }
+                    }
+                    val telegramGroup = outcome?.fold(
+                        onSuccess = { streams -> telegramStreamGroup(streams) },
+                        onFailure = { error -> telegramErrorStreamGroup(error.message) },
+                    ) ?: telegramErrorStreamGroup("Telegram search timed out")
+                    publishCompletion(StreamLoadCompletion.Addon(telegramGroup))
+                }
+            }
+
             repeat(totalTasks) {
                 when (val completion = completions.receive()) {
                     is StreamLoadCompletion.Addon -> {
@@ -628,6 +664,7 @@ object PlayerStreamsRepository {
 
 private const val PLAYER_CLOUDSTREAM_STREAM_PROVIDER_CONCURRENCY = 12
 private const val PLAYER_STREAM_PROVIDER_TIMEOUT_MS = 25_000L
+private const val PLAYER_TELEGRAM_STREAM_TIMEOUT_MS = 60_000L
 
 private data class PlayerInstalledStreamAddonTarget(
     val addonName: String,
