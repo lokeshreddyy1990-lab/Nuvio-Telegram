@@ -180,6 +180,13 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         playerController?.applySubtitleStyle(subtitleStyle)
     }
 
+    LaunchedEffect(playerController) {
+        while (true) {
+            isBitmapSubtitle = playerController?.isCurrentSubtitleBitmap() == true
+            delay(1_500)
+        }
+    }
+
     LaunchedEffect(
         playerController,
         playerControllerSourceUrl,

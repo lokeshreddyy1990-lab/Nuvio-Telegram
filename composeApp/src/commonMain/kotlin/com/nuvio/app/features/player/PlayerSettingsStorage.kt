@@ -67,6 +67,14 @@ internal expect object PlayerSettingsStorage {
     fun saveSubtitleShowOnlyPreferredLanguages(enabled: Boolean)
     fun loadSubtitleStripSdh(): Boolean?
     fun saveSubtitleStripSdh(enabled: Boolean)
+    fun loadSubtitleShadowEnabled(): Boolean?
+    fun saveSubtitleShadowEnabled(enabled: Boolean)
+    fun loadSubtitleShadowPreset(): String?
+    fun saveSubtitleShadowPreset(preset: String)
+    fun loadSubtitleShadowOffset(): Float?
+    fun saveSubtitleShadowOffset(offset: Float)
+    fun loadSubtitleAssOverrideMode(): String?
+    fun saveSubtitleAssOverrideMode(mode: String)
     fun loadAddonSubtitleStartupMode(): String?
     fun saveAddonSubtitleStartupMode(mode: String)
     fun loadStreamReuseLastLinkEnabled(): Boolean?

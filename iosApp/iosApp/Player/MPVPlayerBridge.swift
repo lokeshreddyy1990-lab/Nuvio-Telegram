@@ -17,6 +17,7 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     /// Last subtitle style requested by Kotlin. The player view controller is created lazily, so
     /// styles requested earlier have to be replayed once it exists.
     private var lastSubtitleStyle: SubtitleStyleArguments?
+    private(set) var currentSubtitleIsBitmap = false
 
     func createPlayerViewController() -> UIViewController {
         return ensurePlayerViewController()
@@ -188,7 +189,11 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
         fontFamily: String,
         fontDirectory: String?,
         fontPath: String?,
-        subPos: Int32
+        subPos: Int32,
+        shadowEnabled: Bool,
+        shadowPreset: Int32,
+        shadowOffset: Float,
+        assOverrideMode: Int32
     ) {
         let style = SubtitleStyleArguments(
             textColor: textColor,
@@ -200,7 +205,11 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
             fontFamily: fontFamily,
             fontDirectory: fontDirectory,
             fontPath: fontPath,
-            subPos: Int(subPos)
+            subPos: Int(subPos),
+            shadowEnabled: shadowEnabled,
+            shadowPreset: Int(shadowPreset),
+            shadowOffset: shadowOffset,
+            assOverrideMode: Int(assOverrideMode)
         )
         lastSubtitleStyle = style
         playerVC?.applySubtitleStyle(style)
@@ -217,6 +226,7 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     func getVideoWidth() -> Int32 { Int32(playerVC?.currentVideoWidth ?? 0) }
     func getVideoHeight() -> Int32 { Int32(playerVC?.currentVideoHeight ?? 0) }
     func getErrorMessage() -> String { playerVC?.currentErrorMessage ?? "" }
+    func isCurrentSubtitleBitmap() -> Bool { playerVC?.currentSubtitleIsBitmap ?? false }
 
     func destroy() {
         playerVC?.destroyPlayer()
@@ -284,6 +294,10 @@ struct SubtitleStyleArguments {
     let fontDirectory: String?
     let fontPath: String?
     let subPos: Int
+    let shadowEnabled: Bool
+    let shadowPreset: Int
+    let shadowOffset: Float
+    let assOverrideMode: Int
 }
 
 #if targetEnvironment(simulator)
@@ -1124,12 +1138,14 @@ final class MPVPlayerViewController: UIViewController {
             mpv_set_property(mpv, "sid", MPV_FORMAT_INT64, &id)
         }
         applyCachedSubtitleStyle()
+        refreshActiveSubtitleIsBitmap()
     }
 
     func addSubtitleUrl(_ url: String) {
         guard mpv != nil else { return }
         command("sub-add", args: [url, "select"])
         applyCachedSubtitleStyle()
+        refreshActiveSubtitleIsBitmap()
     }
 
     private func addSubtitle(_ subtitle: PluginSubtitle, mode: String) {
@@ -1152,6 +1168,29 @@ final class MPVPlayerViewController: UIViewController {
         }
 
         applyCachedSubtitleStyle()
+        refreshActiveSubtitleIsBitmap()
+    }
+
+    private func refreshActiveSubtitleIsBitmap() {
+        let count = Int(getInt("track-list/count"))
+        for i in 0..<max(count, 0) {
+            guard getString("track-list/\(i)/selected") == "yes" else { continue }
+            let type = getString("track-list/\(i)/type") ?? ""
+            let codec = getString("track-list/\(i)/codec") ?? ""
+            if type == "sub" && (isBitmapSubtitleCodec(codec) || isBitmapSubtitleType(codec)) {
+                currentSubtitleIsBitmap = true
+                return
+            }
+        }
+        currentSubtitleIsBitmap = false
+    }
+
+    private func isBitmapSubtitleCodec(_ codec: String) -> Bool {
+        return codec.lowercased().contains("pgssub") || codec.lowercased().contains("dvdsub") || codec.lowercased().contains("vobsub")
+    }
+
+    private func isBitmapSubtitleType(_ type: String) -> Bool {
+        return type.lowercased().contains("image") || type.lowercased().contains("bitmap") || type.lowercased().contains("vobsub") || type.lowercased().contains("pgs")
     }
 
     func removeExternalSubtitles() {
@@ -1202,7 +1241,15 @@ final class MPVPlayerViewController: UIViewController {
     private func applyCachedSubtitleStyle() {
         guard mpv != nil, let style = lastSubtitleStyle else { return }
 
-        checkError(mpv_set_property_string(mpv, "sub-ass-override", "force"))
+        let modeValues = ["no", "scale", "yes", "force"]
+        let modeIndex = max(0, min(style.assOverrideMode, 3))
+        checkError(mpv_set_property_string(mpv, "sub-ass-override", modeValues[modeIndex]))
+
+        let shadowSign: Double = style.shadowPreset == 1 ? 1.0 : (style.shadowPreset == 2 ? -1.0 : 0.0)
+        let shadowValue: Double = style.shadowEnabled ? shadowSign * Double(style.shadowOffset) : 0.0
+        var shadow = shadowValue
+        checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
+
         checkError(mpv_set_property_string(mpv, "sub-color", style.textColor))
 
         // opaque-box (ASS BorderStyle 3): one rectangle per line sized to that line's text.
@@ -1214,8 +1261,6 @@ final class MPVPlayerViewController: UIViewController {
             checkError(mpv_set_property_string(mpv, "sub-border-style", "outline-and-shadow"))
             var outline = Double(style.outlineSize)
             checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
-            var shadow: Double = 0
-            checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
             var lineSpacing: Double = 0
             checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
         } else {
@@ -1224,8 +1269,6 @@ final class MPVPlayerViewController: UIViewController {
             checkError(mpv_set_property_string(mpv, "sub-border-style", "opaque-box"))
             var outline = MpvSubtitleStyle.outlineSize
             checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
-            var shadow = MpvSubtitleStyle.shadowOffset
-            checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
             var lineSpacing = MpvSubtitleStyle.lineSpacing
             checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
         }

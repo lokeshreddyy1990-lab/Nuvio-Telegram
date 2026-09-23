@@ -302,6 +302,16 @@ object PlayerSettingsRepository {
                 ?: SubtitleStyleState.DEFAULT.useForcedSubtitles,
             showOnlyPreferredLanguages = PlayerSettingsStorage.loadSubtitleShowOnlyPreferredLanguages()
                 ?: SubtitleStyleState.DEFAULT.showOnlyPreferredLanguages,
+            shadowEnabled = PlayerSettingsStorage.loadSubtitleShadowEnabled()
+                ?: SubtitleStyleState.DEFAULT.shadowEnabled,
+            shadowPreset = PlayerSettingsStorage.loadSubtitleShadowPreset()
+                ?.let { runCatching { SubtitleShadowPreset.valueOf(it) }.getOrNull() }
+                ?: SubtitleStyleState.DEFAULT.shadowPreset,
+            shadowOffset = PlayerSettingsStorage.loadSubtitleShadowOffset()
+                ?: SubtitleStyleState.DEFAULT.shadowOffset,
+            assOverrideMode = PlayerSettingsStorage.loadSubtitleAssOverrideMode()
+                ?.let { runCatching { AssOverrideMode.valueOf(it) }.getOrNull() }
+                ?: SubtitleStyleState.DEFAULT.assOverrideMode,
         )
         addonSubtitleStartupMode = PlayerSettingsStorage.loadAddonSubtitleStartupMode()
             ?.let { runCatching { AddonSubtitleStartupMode.valueOf(it) }.getOrNull() }
@@ -573,6 +583,10 @@ object PlayerSettingsRepository {
         PlayerSettingsStorage.saveSubtitleBottomOffset(style.bottomOffset)
         PlayerSettingsStorage.saveSubtitleUseForcedSubtitles(style.useForcedSubtitles)
         PlayerSettingsStorage.saveSubtitleShowOnlyPreferredLanguages(style.showOnlyPreferredLanguages)
+        PlayerSettingsStorage.saveSubtitleShadowEnabled(style.shadowEnabled)
+        PlayerSettingsStorage.saveSubtitleShadowPreset(style.shadowPreset.name)
+        PlayerSettingsStorage.saveSubtitleShadowOffset(style.shadowOffset)
+        PlayerSettingsStorage.saveSubtitleAssOverrideMode(style.assOverrideMode.name)
     }
 
     fun setAddonSubtitleStartupMode(mode: AddonSubtitleStartupMode) {

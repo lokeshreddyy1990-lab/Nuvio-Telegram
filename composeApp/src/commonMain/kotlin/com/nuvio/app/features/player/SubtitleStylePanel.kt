@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +47,7 @@ fun SubtitleStylePanel(
     style: SubtitleStyleState,
     isCompact: Boolean,
     onStyleChanged: (SubtitleStyleState) -> Unit,
+    isBitmapSubtitle: Boolean = false,
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val sectionPadding = if (isCompact) 12.dp else 16.dp
@@ -59,6 +61,18 @@ fun SubtitleStylePanel(
             isCompact = isCompact,
             sectionPadding = sectionPadding,
             colorScheme = colorScheme,
+            onStyleChanged = onStyleChanged,
+        )
+        OutlineShadowSection(
+            style = style,
+            isCompact = isCompact,
+            stylingEnabled = !isBitmapSubtitle,
+            onStyleChanged = onStyleChanged,
+        )
+        AdvancedAssSection(
+            style = style,
+            isCompact = isCompact,
+            stylingEnabled = !isBitmapSubtitle,
             onStyleChanged = onStyleChanged,
         )
     }
@@ -461,6 +475,271 @@ private fun StyleControlsCard(
                     fontSize = if (isCompact) 12.sp else 14.sp,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun OutlineShadowSection(
+    style: SubtitleStyleState,
+    isCompact: Boolean,
+    stylingEnabled: Boolean,
+    onStyleChanged: (SubtitleStyleState) -> Unit,
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val sectionPadding = if (isCompact) 12.dp else 16.dp
+    val btnSize = if (isCompact) 28.dp else 32.dp
+    val btnRadius = if (isCompact) 14.dp else 16.dp
+    val apply: (SubtitleStyleState) -> Unit = { next ->
+        if (stylingEnabled) onStyleChanged(next)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .padding(sectionPadding),
+        verticalArrangement = Arrangement.spacedBy(if (isCompact) 12.dp else 16.dp),
+    ) {
+        SectionHeader(
+            icon = Icons.Rounded.Tune,
+            label = stringResource(Res.string.compose_player_outline_shadow_title),
+        )
+
+        if (!stylingEnabled) {
+            Text(
+                text = stringResource(Res.string.compose_player_bitmap_style_note),
+                color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                fontSize = 12.sp,
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(if (stylingEnabled) 1f else 0.45f),
+            verticalArrangement = Arrangement.spacedBy(if (isCompact) 12.dp else 16.dp),
+        ) {
+            ToggleRow(
+                label = stringResource(Res.string.compose_player_shadow),
+                enabled = style.shadowEnabled,
+                onToggle = { apply(style.copy(shadowEnabled = !style.shadowEnabled)) },
+            )
+
+            if (style.shadowEnabled) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SubtitleFontFamilyChip(
+                        label = stringResource(Res.string.compose_player_shadow_flat),
+                        selected = style.shadowPreset == SubtitleShadowPreset.Flat,
+                        onClick = { apply(style.copy(shadowPreset = SubtitleShadowPreset.Flat)) },
+                        isCompact = isCompact,
+                    )
+                    SubtitleFontFamilyChip(
+                        label = stringResource(Res.string.compose_player_shadow_raised),
+                        selected = style.shadowPreset == SubtitleShadowPreset.Raised,
+                        onClick = { apply(style.copy(shadowPreset = SubtitleShadowPreset.Raised)) },
+                        isCompact = isCompact,
+                    )
+                    SubtitleFontFamilyChip(
+                        label = stringResource(Res.string.compose_player_shadow_depressed),
+                        selected = style.shadowPreset == SubtitleShadowPreset.Depressed,
+                        onClick = { apply(style.copy(shadowPreset = SubtitleShadowPreset.Depressed)) },
+                        isCompact = isCompact,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(Res.string.compose_player_shadow_offset),
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    StepperControl(
+                        value = style.shadowOffset.roundToInt().toString(),
+                        onMinus = {
+                            apply(style.copy(shadowOffset = (style.shadowOffset - 1f).coerceIn(1f, 24f)))
+                        },
+                        onPlus = {
+                            apply(style.copy(shadowOffset = (style.shadowOffset + 1f).coerceIn(1f, 24f)))
+                        },
+                        buttonSize = btnSize,
+                        buttonRadius = btnRadius,
+                        minWidth = 46.dp,
+                        minusIcon = Icons.Rounded.KeyboardArrowDown,
+                        plusIcon = Icons.Rounded.KeyboardArrowUp,
+                    )
+                }
+
+                Text(
+                    text = stringResource(Res.string.compose_player_shadow_outline_note),
+                    color = colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    fontSize = 12.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdvancedAssSection(
+    style: SubtitleStyleState,
+    isCompact: Boolean,
+    stylingEnabled: Boolean,
+    onStyleChanged: (SubtitleStyleState) -> Unit,
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val sectionPadding = if (isCompact) 12.dp else 16.dp
+    val apply: (SubtitleStyleState) -> Unit = { next ->
+        if (stylingEnabled) onStyleChanged(next)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .padding(sectionPadding),
+        verticalArrangement = Arrangement.spacedBy(if (isCompact) 12.dp else 16.dp),
+    ) {
+        SectionHeader(
+            icon = Icons.Rounded.Tune,
+            label = stringResource(Res.string.compose_player_advanced_ass_title),
+        )
+
+        if (!stylingEnabled) {
+            Text(
+                text = stringResource(Res.string.compose_player_bitmap_style_note),
+                color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                fontSize = 12.sp,
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(colorScheme.surface.copy(alpha = 0.7f))
+                .border(1.dp, colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                .padding(if (isCompact) 10.dp else 12.dp),
+        ) {
+            Text(
+                text = stringResource(Res.string.compose_player_ass_info),
+                color = colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(if (stylingEnabled) 1f else 0.45f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AssOverrideMode.entries.forEach { mode ->
+                AssOverrideModeCard(
+                    mode = mode,
+                    selected = style.assOverrideMode == mode,
+                    isCompact = isCompact,
+                    onClick = { apply(style.copy(assOverrideMode = mode)) },
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                SmallActionPill(
+                    text = stringResource(Res.string.compose_player_ass_reset_preserve),
+                    onClick = { apply(style.copy(assOverrideMode = AssOverrideMode.Preserve)) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssOverrideModeCard(
+    mode: AssOverrideMode,
+    selected: Boolean,
+    isCompact: Boolean,
+    onClick: () -> Unit,
+) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (selected) colorScheme.primaryContainer
+                else colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            )
+            .border(
+                width = 1.dp,
+                color = if (selected) colorScheme.primary.copy(alpha = 0.6f)
+                else colorScheme.outlineVariant.copy(alpha = 0.75f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(if (isCompact) 10.dp else 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(if (selected) colorScheme.primary else colorScheme.surface.copy(alpha = 0.8f))
+                .border(2.dp, if (selected) colorScheme.primary else colorScheme.outlineVariant, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(colorScheme.onPrimary),
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = when (mode) {
+                    AssOverrideMode.Preserve -> stringResource(Res.string.compose_player_ass_preserve)
+                    AssOverrideMode.ScaleOnly -> stringResource(Res.string.compose_player_ass_scale_only)
+                    AssOverrideMode.OverrideColorsOutlines -> stringResource(Res.string.compose_player_ass_override_colors)
+                    AssOverrideMode.Force -> stringResource(Res.string.compose_player_ass_force)
+                },
+                color = if (selected) colorScheme.onPrimaryContainer else colorScheme.onSurface,
+                fontSize = if (isCompact) 13.sp else 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = when (mode) {
+                    AssOverrideMode.Preserve -> stringResource(Res.string.compose_player_ass_preserve_desc)
+                    AssOverrideMode.ScaleOnly -> stringResource(Res.string.compose_player_ass_scale_only_desc)
+                    AssOverrideMode.OverrideColorsOutlines -> stringResource(Res.string.compose_player_ass_override_colors_desc)
+                    AssOverrideMode.Force -> stringResource(Res.string.compose_player_ass_force_desc)
+                },
+                color = if (selected) colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                else colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
         }
     }
 }

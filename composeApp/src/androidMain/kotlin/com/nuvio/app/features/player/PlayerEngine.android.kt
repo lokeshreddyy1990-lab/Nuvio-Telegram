@@ -1670,7 +1670,7 @@ private class NuvioLibmpvView(
             }
 
             override fun applySubtitleStyle(style: SubtitleStyleState) {
-                mpv.setPropertyString("sub-ass-override", "force")
+                mpv.setPropertyString("sub-ass-override", style.toMpvAssOverrideValue())
                 mpv.setPropertyString("sub-color", style.textColor.toMpvColor())
                 mpv.setPropertyString(
                     "sub-back-color",
@@ -1690,14 +1690,14 @@ private class NuvioLibmpvView(
                     mpv.setPropertyString("sub-border-color", style.backgroundColor.toMpvColor())
                     mpv.setPropertyDouble("sub-outline-size", MPV_SUBTITLE_OUTLINE_SIZE.toDouble())
                     mpv.setPropertyInt("sub-border-size", 0)
-                    mpv.setPropertyDouble("sub-shadow-offset", MPV_SUBTITLE_SHADOW_OFFSET)
+                    mpv.setPropertyDouble("sub-shadow-offset", style.toMpvShadowOffset().toDouble())
                     mpv.setPropertyDouble("sub-line-spacing", MPV_SUBTITLE_LINE_SPACING)
                 } else {
                     mpv.setPropertyString("sub-outline-color", style.outlineColor.toMpvColor())
                     mpv.setPropertyString("sub-border-color", style.outlineColor.toMpvColor())
                     mpv.setPropertyInt("sub-outline-size", style.toMpvSubtitleOutlineSize())
                     mpv.setPropertyInt("sub-border-size", style.toMpvSubtitleOutlineSize())
-                    mpv.setPropertyDouble("sub-shadow-offset", 0.0)
+                    mpv.setPropertyDouble("sub-shadow-offset", style.toMpvShadowOffset().toDouble())
                     mpv.setPropertyDouble("sub-line-spacing", 0.0)
                 }
             }

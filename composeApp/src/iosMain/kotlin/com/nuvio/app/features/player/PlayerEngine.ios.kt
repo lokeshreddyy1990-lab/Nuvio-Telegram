@@ -279,8 +279,14 @@ actual fun PlatformPlayerSurface(
                     // customFontDirectory() on iOS.
                     fontPath = style.customFontFilePath(),
                     subPos = style.toMpvSubtitlePosition(),
+                    shadowEnabled = style.shadowEnabled,
+                    shadowPreset = style.shadowPreset.ordinal,
+                    shadowOffset = style.shadowOffset,
+                    assOverrideMode = style.assOverrideMode.ordinal,
                 )
             }
+
+            override fun isCurrentSubtitleBitmap(): Boolean = bridge.isCurrentSubtitleBitmap()
         }
     }
 

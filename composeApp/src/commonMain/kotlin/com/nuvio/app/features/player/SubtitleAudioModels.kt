@@ -59,6 +59,19 @@ const val SUBTITLE_DELAY_MIN_MS = -600_000
 const val SUBTITLE_DELAY_MAX_MS = 600_000
 const val SUBTITLE_DELAY_STEP_MS = 100
 
+enum class SubtitleShadowPreset {
+    Flat,
+    Raised,
+    Depressed,
+}
+
+enum class AssOverrideMode {
+    Preserve,
+    ScaleOnly,
+    OverrideColorsOutlines,
+    Force,
+}
+
 data class SubtitleStyleState(
     val textColor: Color = Color.White,
     val backgroundColor: Color = Color.Transparent,
@@ -74,6 +87,10 @@ data class SubtitleStyleState(
     val useForcedSubtitles: Boolean = false,
     val showOnlyPreferredLanguages: Boolean = false,
     val stripSdh: Boolean = false,
+    val shadowEnabled: Boolean = false,
+    val shadowPreset: SubtitleShadowPreset = SubtitleShadowPreset.Flat,
+    val shadowOffset: Float = 4f,
+    val assOverrideMode: AssOverrideMode = AssOverrideMode.Preserve,
 ) {
     companion object {
         val DEFAULT = SubtitleStyleState()
@@ -154,6 +171,30 @@ fun subtitleColorFromStorage(value: String?): Color? {
         alpha = ((parsed shr 24) and 0xFF).toFloat() / 255f,
     )
 }
+
+fun SubtitleStyleState.toMpvAssOverrideValue(): String =
+    when (assOverrideMode) {
+        AssOverrideMode.Preserve -> "no"
+        AssOverrideMode.ScaleOnly -> "scale"
+        AssOverrideMode.OverrideColorsOutlines -> "yes"
+        AssOverrideMode.Force -> "force"
+    }
+
+fun SubtitleStyleState.toMpvShadowOffset(): Float =
+    if (!shadowEnabled) 0f
+    else when (shadowPreset) {
+        SubtitleShadowPreset.Flat -> 0f
+        SubtitleShadowPreset.Raised -> shadowOffset
+        SubtitleShadowPreset.Depressed -> -shadowOffset
+    }
+
+fun SubtitleStyleState.shadowEffectiveOffset(): Float =
+    if (!shadowEnabled) 0f
+    else when (shadowPreset) {
+        SubtitleShadowPreset.Flat -> 0f
+        SubtitleShadowPreset.Raised -> shadowOffset
+        SubtitleShadowPreset.Depressed -> -shadowOffset
+    }
 
 data class SubtitleAudioUiState(
     val audioTracks: List<AudioTrack> = emptyList(),

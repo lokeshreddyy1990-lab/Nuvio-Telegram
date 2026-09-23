@@ -68,6 +68,7 @@ fun SubtitleModal(
     selectedAddonSubtitleId: String?,
     isLoadingAddonSubtitles: Boolean,
     subtitleStyle: SubtitleStyleState,
+    isBitmapSubtitle: Boolean = false,
     subtitleDelayMs: Int,
     selectedAddonSubtitle: AddonSubtitle?,
     subtitleAutoSyncState: SubtitleAutoSyncUiState,
@@ -178,6 +179,7 @@ fun SubtitleModal(
                                     style = subtitleStyle,
                                     isCompact = isCompact,
                                     onStyleChanged = onStyleChanged,
+                                    isBitmapSubtitle = isBitmapSubtitle,
                                 )
                             }
                         }

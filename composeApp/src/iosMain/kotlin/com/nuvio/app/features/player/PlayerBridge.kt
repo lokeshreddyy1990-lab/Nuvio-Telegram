@@ -85,9 +85,14 @@ interface NuvioPlayerBridge {
         fontDirectory: String?,
         fontPath: String?,
         subPos: Int,
+        shadowEnabled: Boolean,
+        shadowPreset: Int,
+        shadowOffset: Float,
+        assOverrideMode: Int,
     )
     fun getIsLoading(): Boolean
     fun getIsPlaying(): Boolean
+    fun isCurrentSubtitleBitmap(): Boolean
     fun getIsEnded(): Boolean
     fun getDurationMs(): Long
     fun getPositionMs(): Long

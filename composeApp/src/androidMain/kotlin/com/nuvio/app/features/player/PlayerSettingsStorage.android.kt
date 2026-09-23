@@ -51,6 +51,10 @@ actual object PlayerSettingsStorage {
     private const val subtitleStripSdhKey = "subtitle_strip_sdh"
     private const val subtitleUseForcedSubtitlesKey = "subtitle_use_forced_subtitles"
     private const val subtitleShowOnlyPreferredLanguagesKey = "subtitle_show_only_preferred_languages"
+    private const val subtitleShadowEnabledKey = "subtitle_shadow_enabled"
+    private const val subtitleShadowPresetKey = "subtitle_shadow_preset"
+    private const val subtitleShadowOffsetKey = "subtitle_shadow_offset"
+    private const val subtitleAssOverrideModeKey = "subtitle_ass_override_mode"
     private const val addonSubtitleStartupModeKey = "addon_subtitle_startup_mode"
     private const val streamReuseLastLinkEnabledKey = "stream_reuse_last_link_enabled"
     private const val streamReuseLastLinkCacheHoursKey = "stream_reuse_last_link_cache_hours"
@@ -129,6 +133,10 @@ actual object PlayerSettingsStorage {
         subtitleStripSdhKey,
         subtitleUseForcedSubtitlesKey,
         subtitleShowOnlyPreferredLanguagesKey,
+        subtitleShadowEnabledKey,
+        subtitleShadowPresetKey,
+        subtitleShadowOffsetKey,
+        subtitleAssOverrideModeKey,
         addonSubtitleStartupModeKey,
         streamReuseLastLinkEnabledKey,
         streamReuseLastLinkCacheHoursKey,
@@ -631,6 +639,60 @@ actual object PlayerSettingsStorage {
         preferences
             ?.edit()
             ?.putBoolean(ProfileScopedKey.of(subtitleStripSdhKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadSubtitleShadowEnabled(): Boolean? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(subtitleShadowEnabledKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getBoolean(key, SubtitleStyleState.DEFAULT.shadowEnabled)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveSubtitleShadowEnabled(enabled: Boolean) {
+        preferences
+            ?.edit()
+            ?.putBoolean(ProfileScopedKey.of(subtitleShadowEnabledKey), enabled)
+            ?.apply()
+    }
+
+    actual fun loadSubtitleShadowPreset(): String? =
+        preferences?.getString(ProfileScopedKey.of(subtitleShadowPresetKey), null)
+
+    actual fun saveSubtitleShadowPreset(preset: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(subtitleShadowPresetKey), preset)
+            ?.apply()
+    }
+
+    actual fun loadSubtitleShadowOffset(): Float? =
+        preferences?.let { sharedPreferences ->
+            val key = ProfileScopedKey.of(subtitleShadowOffsetKey)
+            if (sharedPreferences.contains(key)) {
+                sharedPreferences.getFloat(key, SubtitleStyleState.DEFAULT.shadowOffset)
+            } else {
+                null
+            }
+        }
+
+    actual fun saveSubtitleShadowOffset(offset: Float) {
+        preferences
+            ?.edit()
+            ?.putFloat(ProfileScopedKey.of(subtitleShadowOffsetKey), offset)
+            ?.apply()
+    }
+
+    actual fun loadSubtitleAssOverrideMode(): String? =
+        preferences?.getString(ProfileScopedKey.of(subtitleAssOverrideModeKey), null)
+
+    actual fun saveSubtitleAssOverrideMode(mode: String) {
+        preferences
+            ?.edit()
+            ?.putString(ProfileScopedKey.of(subtitleAssOverrideModeKey), mode)
             ?.apply()
     }
 
@@ -1283,6 +1345,10 @@ actual object PlayerSettingsStorage {
         loadSubtitleStripSdh()?.let { put(subtitleStripSdhKey, encodeSyncBoolean(it)) }
         loadSubtitleUseForcedSubtitles()?.let { put(subtitleUseForcedSubtitlesKey, encodeSyncBoolean(it)) }
         loadSubtitleShowOnlyPreferredLanguages()?.let { put(subtitleShowOnlyPreferredLanguagesKey, encodeSyncBoolean(it)) }
+        loadSubtitleShadowEnabled()?.let { put(subtitleShadowEnabledKey, encodeSyncBoolean(it)) }
+        loadSubtitleShadowPreset()?.let { put(subtitleShadowPresetKey, encodeSyncString(it)) }
+        loadSubtitleShadowOffset()?.let { put(subtitleShadowOffsetKey, encodeSyncFloat(it)) }
+        loadSubtitleAssOverrideMode()?.let { put(subtitleAssOverrideModeKey, encodeSyncString(it)) }
         loadAddonSubtitleStartupMode()?.let { put(addonSubtitleStartupModeKey, encodeSyncString(it)) }
         loadStreamReuseLastLinkEnabled()?.let { put(streamReuseLastLinkEnabledKey, encodeSyncBoolean(it)) }
         loadStreamReuseLastLinkCacheHours()?.let { put(streamReuseLastLinkCacheHoursKey, encodeSyncInt(it)) }
@@ -1367,6 +1433,10 @@ actual object PlayerSettingsStorage {
         payload.decodeSyncBoolean(subtitleStripSdhKey)?.let(::saveSubtitleStripSdh)
         payload.decodeSyncBoolean(subtitleUseForcedSubtitlesKey)?.let(::saveSubtitleUseForcedSubtitles)
         payload.decodeSyncBoolean(subtitleShowOnlyPreferredLanguagesKey)?.let(::saveSubtitleShowOnlyPreferredLanguages)
+        payload.decodeSyncBoolean(subtitleShadowEnabledKey)?.let(::saveSubtitleShadowEnabled)
+        payload.decodeSyncString(subtitleShadowPresetKey)?.let(::saveSubtitleShadowPreset)
+        payload.decodeSyncFloat(subtitleShadowOffsetKey)?.let(::saveSubtitleShadowOffset)
+        payload.decodeSyncString(subtitleAssOverrideModeKey)?.let(::saveSubtitleAssOverrideMode)
         payload.decodeSyncString(addonSubtitleStartupModeKey)?.let(::saveAddonSubtitleStartupMode)
         payload.decodeSyncBoolean(streamReuseLastLinkEnabledKey)?.let(::saveStreamReuseLastLinkEnabled)
         payload.decodeSyncInt(streamReuseLastLinkCacheHoursKey)?.let(::saveStreamReuseLastLinkCacheHours)
