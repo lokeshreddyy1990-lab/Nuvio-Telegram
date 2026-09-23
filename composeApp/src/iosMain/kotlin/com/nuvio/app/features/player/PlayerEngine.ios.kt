@@ -274,6 +274,10 @@ actual fun PlatformPlayerSurface(
                     fontSize = style.toMpvSubtitleFontSize(),
                     fontFamily = style.toIosMpvSubtitleFont(),
                     fontDirectory = style.customFontDirectory(),
+                    // Only set for the Custom family: the iOS bridge registers the file with
+                    // CoreText and resolves its family name, because libass never scans
+                    // customFontDirectory() on iOS.
+                    fontPath = style.customFontFilePath(),
                     subPos = style.toMpvSubtitlePosition(),
                 )
             }
@@ -464,6 +468,10 @@ private fun SubtitleStyleState.toIosMpvSubtitleFont(): String =
     } else {
         fontFamily.toIosMpvSubtitleFont()
     }
+
+private fun SubtitleStyleState.customFontFilePath(): String? =
+    customFontPath
+        ?.takeIf { fontFamily == SubtitleFontFamily.Custom && it.isNotBlank() }
 
 private fun SubtitleStyleState.customFontDirectory(): String? =
     customFontPath

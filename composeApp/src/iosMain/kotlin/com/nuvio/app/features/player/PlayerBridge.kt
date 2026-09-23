@@ -66,6 +66,14 @@ interface NuvioPlayerBridge {
     fun clearExternalSubtitle()
     fun clearExternalSubtitleAndSelect(trackId: Int)
     fun setSubtitleDelayMs(delayMs: Int)
+    /**
+     * Applies the subtitle style to the native player.
+     *
+     * [fontFamily] is the requested family name, while [fontPath] points at an imported custom
+     * font file. The iOS side registers that file with CoreText and replaces [fontFamily] with the
+     * font's real family name, because the bundled libass uses the CoreText font provider (it
+     * ignores `sub-fonts-dir`).
+     */
     fun applySubtitleStyle(
         textColor: String,
         backgroundColor: String,
@@ -75,6 +83,7 @@ interface NuvioPlayerBridge {
         fontSize: Float,
         fontFamily: String,
         fontDirectory: String?,
+        fontPath: String?,
         subPos: Int,
     )
     fun getIsLoading(): Boolean

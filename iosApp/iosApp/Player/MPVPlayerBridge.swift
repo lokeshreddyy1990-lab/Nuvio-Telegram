@@ -14,6 +14,9 @@ import ComposeApp
 final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
 
     private var playerVC: MPVPlayerViewController?
+    /// Last subtitle style requested by Kotlin. The player view controller is created lazily, so
+    /// styles requested earlier have to be replayed once it exists.
+    private var lastSubtitleStyle: SubtitleStyleArguments?
 
     func createPlayerViewController() -> UIViewController {
         return ensurePlayerViewController()
@@ -23,11 +26,19 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
         if let playerVC { return playerVC }
         let vc = MPVPlayerViewController()
         self.playerVC = vc
+        if let lastSubtitleStyle {
+            vc.applySubtitleStyle(lastSubtitleStyle)
+        }
         return vc
     }
 
     func loadFile(url: String) { ensurePlayerViewController().loadFile(url) }
     func loadFileWithAudio(videoUrl: String, audioUrl: String?, headersJson: String?, subtitlesJson: String?) {
+        // Register the imported subtitle font before mpv sets up libass for this file: the
+        // CoreText font provider only sees fonts registered in the process.
+        if let fontPath = lastSubtitleStyle?.fontPath {
+            SubtitleFontRegistrar.register(path: fontPath)
+        }
         ensurePlayerViewController().loadFile(
             videoUrl,
             audioUrl: audioUrl,
@@ -176,9 +187,10 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
         fontSize: Float,
         fontFamily: String,
         fontDirectory: String?,
+        fontPath: String?,
         subPos: Int32
     ) {
-        playerVC?.applySubtitleStyle(
+        let style = SubtitleStyleArguments(
             textColor: textColor,
             backgroundColor: backgroundColor,
             outlineColor: outlineColor,
@@ -187,8 +199,11 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
             fontSize: fontSize,
             fontFamily: fontFamily,
             fontDirectory: fontDirectory,
+            fontPath: fontPath,
             subPos: Int(subPos)
         )
+        lastSubtitleStyle = style
+        playerVC?.applySubtitleStyle(style)
     }
 
     // State - refreshes position from mpv on each call (polled from Kotlin every 250ms)
@@ -252,6 +267,23 @@ private struct PendingLoadRequest {
     let requestHeaders: [String: String]
     let subtitles: [PluginSubtitle]
     let queuedAtUptime: TimeInterval
+}
+
+/// Subtitle style values requested by Kotlin.
+///
+/// Cached by both the bridge and the player view controller so a style requested before the
+/// player exists (or before the current file finished loading) is still applied.
+struct SubtitleStyleArguments {
+    let textColor: String
+    let backgroundColor: String
+    let outlineColor: String
+    let outlineSize: Float
+    let bold: Bool
+    let fontSize: Float
+    let fontFamily: String
+    let fontDirectory: String?
+    let fontPath: String?
+    let subPos: Int
 }
 
 #if targetEnvironment(simulator)
@@ -323,6 +355,9 @@ final class MPVPlayerViewController: UIViewController {
     private var recentPlaybackLogs: [String] = []
     private var activeRequestHeaders: [String: String] = [:]
     private var hasLoadedCurrentFile: Bool = false
+    /// Last subtitle style requested by Kotlin. Replayed after the file loads and after subtitle
+    /// tracks are added, so the style is never lost.
+    private var lastSubtitleStyle: SubtitleStyleArguments?
 
     // Cached track lists
     var audioTracks: [TrackInfo] = []
@@ -854,6 +889,10 @@ final class MPVPlayerViewController: UIViewController {
 #else
         layoutMetalLayer()
 #endif
+        if let fontPath = lastSubtitleStyle?.fontPath {
+            // libass builds its font database while decoding this file, so register beforehand.
+            SubtitleFontRegistrar.register(path: fontPath)
+        }
         clearPlaybackError()
         let sanitizedHeaders = sanitizeRequestHeaders(request.requestHeaders)
         activeRequestHeaders = sanitizedHeaders
@@ -1063,11 +1102,13 @@ final class MPVPlayerViewController: UIViewController {
             var id = Int64(trackId)
             mpv_set_property(mpv, "sid", MPV_FORMAT_INT64, &id)
         }
+        applyCachedSubtitleStyle()
     }
 
     func addSubtitleUrl(_ url: String) {
         guard mpv != nil else { return }
         command("sub-add", args: [url, "select"])
+        applyCachedSubtitleStyle()
     }
 
     private func addSubtitle(_ subtitle: PluginSubtitle, mode: String) {
@@ -1088,6 +1129,8 @@ final class MPVPlayerViewController: UIViewController {
         if !subtitleHeaders.isEmpty {
             applyRequestHeaders(previousHeaders)
         }
+
+        applyCachedSubtitleStyle()
     }
 
     func removeExternalSubtitles() {
@@ -1128,30 +1171,27 @@ final class MPVPlayerViewController: UIViewController {
         checkError(mpv_set_property(mpv, "sub-delay", MPV_FORMAT_DOUBLE, &delaySeconds))
     }
 
-    func applySubtitleStyle(
-        textColor: String,
-        backgroundColor: String,
-        outlineColor: String,
-        outlineSize: Float,
-        bold: Bool,
-        fontSize: Float,
-        fontFamily: String,
-        fontDirectory: String?,
-        subPos: Int
-    ) {
-        guard mpv != nil else { return }
+    func applySubtitleStyle(_ style: SubtitleStyleArguments) {
+        lastSubtitleStyle = style
+        applyCachedSubtitleStyle()
+    }
+
+    /// Applies [lastSubtitleStyle]. Called on every style change, after the file finished loading
+    /// and whenever a subtitle track is added or selected, so the style is never dropped.
+    private func applyCachedSubtitleStyle() {
+        guard mpv != nil, let style = lastSubtitleStyle else { return }
 
         checkError(mpv_set_property_string(mpv, "sub-ass-override", "force"))
-        checkError(mpv_set_property_string(mpv, "sub-color", textColor))
+        checkError(mpv_set_property_string(mpv, "sub-color", style.textColor))
 
         // opaque-box (ASS BorderStyle 3): one rectangle per line sized to that line's text.
         // Single outline layer only; back-color must stay transparent or boxes stack.
-        let backgroundTransparent = backgroundColor.hasPrefix("#00")
+        let backgroundTransparent = style.backgroundColor.hasPrefix("#00")
         if backgroundTransparent {
-            checkError(mpv_set_property_string(mpv, "sub-back-color", backgroundColor))
-            checkError(mpv_set_property_string(mpv, "sub-outline-color", outlineColor))
+            checkError(mpv_set_property_string(mpv, "sub-back-color", style.backgroundColor))
+            checkError(mpv_set_property_string(mpv, "sub-outline-color", style.outlineColor))
             checkError(mpv_set_property_string(mpv, "sub-border-style", "outline-and-shadow"))
-            var outline = Double(outlineSize)
+            var outline = Double(style.outlineSize)
             checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
             var shadow: Double = 0
             checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
@@ -1159,7 +1199,7 @@ final class MPVPlayerViewController: UIViewController {
             checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
         } else {
             checkError(mpv_set_property_string(mpv, "sub-back-color", "#00000000"))
-            checkError(mpv_set_property_string(mpv, "sub-outline-color", backgroundColor))
+            checkError(mpv_set_property_string(mpv, "sub-outline-color", style.backgroundColor))
             checkError(mpv_set_property_string(mpv, "sub-border-style", "opaque-box"))
             var outline = MpvSubtitleStyle.outlineSize
             checkError(mpv_set_property(mpv, "sub-outline-size", MPV_FORMAT_DOUBLE, &outline))
@@ -1169,16 +1209,23 @@ final class MPVPlayerViewController: UIViewController {
             checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
         }
 
-        setStringProperty("sub-bold", bold ? "yes" : "no")
-        if let fontDirectory, !fontDirectory.isEmpty {
+        setStringProperty("sub-bold", style.bold ? "yes" : "no")
+        if let fontDirectory = style.fontDirectory, !fontDirectory.isEmpty {
+            // Kept for completeness: only libass builds with fontconfig read this option.
             checkError(mpv_set_property_string(mpv, "sub-fonts-dir", fontDirectory))
         }
+        // The bundled libass uses the CoreText font provider, which only sees fonts registered in
+        // the process. Register the imported file and use the font's real family name.
+        let fontFamily = SubtitleFontRegistrar.resolveFamilyName(
+            path: style.fontPath,
+            fallback: style.fontFamily
+        ) ?? style.fontFamily
         checkError(mpv_set_property_string(mpv, "sub-font", fontFamily))
 
-        var size = Double(fontSize)
+        var size = Double(style.fontSize)
         checkError(mpv_set_property(mpv, "sub-font-size", MPV_FORMAT_DOUBLE, &size))
 
-        var position = Int64(subPos)
+        var position = Int64(style.subPos)
         checkError(mpv_set_property(mpv, "sub-pos", MPV_FORMAT_INT64, &position))
         setStringProperty("sub-filter-sdh", "no")
         setStringProperty("sub-filter-sdh-harder", "no")
@@ -1511,6 +1558,8 @@ final class MPVPlayerViewController: UIViewController {
                         self.startRenderPump()
 #endif
                         self.updateState()
+                        // Re-apply the subtitle style so custom fonts and colors survive the load.
+                        self.applyCachedSubtitleStyle()
 #if targetEnvironment(simulator)
                         self.scheduleRender(force: true)
 #endif
@@ -1704,5 +1753,8 @@ final class MPVPlayerBridgeCreator: NSObject, NuvioPlayerBridgeCreator {
 enum NuvioPlayerRegistration {
     static func register() {
         NuvioPlayerBridgeFactory.shared.registerFactory(creator: MPVPlayerBridgeCreator())
+        // Process scoped CoreText registrations do not survive a relaunch, so re-register the
+        // imported subtitle font(s) at startup for libass.
+        SubtitleFontRegistrar.registerImportedFonts()
     }
 }
