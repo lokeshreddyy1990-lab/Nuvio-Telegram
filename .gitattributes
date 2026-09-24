@@ -1,0 +1,11 @@
+*.sh text eol=lf
+*.py text eol=lf
+*.toml text eol=lf
+*.kts text eol=lf
+*.swift text eol=lf
+*.m text eol=lf
+*.h text eol=lf
+*.plist text eol=lf
+*.xcconfig text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

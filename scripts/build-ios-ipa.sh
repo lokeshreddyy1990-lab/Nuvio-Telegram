@@ -41,6 +41,13 @@ fi
 if [[ -n "${NUVIO_KOTLIN_NATIVE_JVMARGS:-}" ]]; then
     build_environment+=("ORG_GRADLE_PROJECT_kotlin.native.jvmArgs=${NUVIO_KOTLIN_NATIVE_JVMARGS}")
 fi
+products_directory="${derived_data}/Build/Products/${configuration}-iphoneos"
+xcode_log_directory="${IOS_XCODE_LOG_DIR:-${repository_root}/build/ios-logs}"
+mkdir -p "${xcode_log_directory}"
+xcode_log="${xcode_log_directory}/xcodebuild-full-${configuration_slug}.log"
+echo "Writing xcodebuild log to ${xcode_log}"
+
+set +e
 "${build_environment[@]}" \
     xcodebuild \
     -project iosApp/iosApp.xcodeproj \
@@ -52,9 +59,21 @@ fi
     CODE_SIGNING_ALLOWED=NO \
     CODE_SIGNING_REQUIRED=NO \
     CODE_SIGN_IDENTITY= \
-    build
+    build 2>&1 | tee "${xcode_log}"
+xcode_status=${PIPESTATUS[0]}
+set -e
 
-products_directory="${derived_data}/Build/Products/${configuration}-iphoneos"
+if [[ ${xcode_status} -ne 0 ]]; then
+    echo "xcodebuild failed with exit code ${xcode_status}." >&2
+    echo "--- xcodebuild errors (last 200 lines) ---" >&2
+    tail -n 200 "${xcode_log}" >&2 || true
+    echo "--- ** ARCHIVE FAILED / error: lines ---" >&2
+    grep -E "error:|ARCHIVE FAILED|BUILD FAILED|Failed to|undefined symbol|duplicate symbol" "${xcode_log}" | tail -n 100 >&2 || true
+    echo "Full log: ${xcode_log}" >&2
+    exit ${xcode_status}
+fi
+echo "xcodebuild succeeded. Full log: ${xcode_log}"
+
 app_path="${products_directory}/Nuvio Enhanced.app"
 if [[ ! -d "${app_path}" ]]; then
     app_path="${products_directory}/Nuvio.app"
