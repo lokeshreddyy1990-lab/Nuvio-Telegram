@@ -17,7 +17,6 @@ final class MPVPlayerBridgeImpl: NSObject, NuvioPlayerBridge {
     /// Last subtitle style requested by Kotlin. The player view controller is created lazily, so
     /// styles requested earlier have to be replayed once it exists.
     private var lastSubtitleStyle: SubtitleStyleArguments?
-    private(set) var currentSubtitleIsBitmap = false
 
     func createPlayerViewController() -> UIViewController {
         return ensurePlayerViewController()
@@ -386,6 +385,18 @@ final class MPVPlayerViewController: UIViewController {
     var positionMs: Int64 = 0
     var bufferedMs: Int64 = 0
     var currentSpeed: Float = 1.0
+    private let bitmapSubtitleStateLock = NSLock()
+    private var _currentSubtitleIsBitmap: Bool = false
+    var currentSubtitleIsBitmap: Bool {
+        bitmapSubtitleStateLock.lock()
+        defer { bitmapSubtitleStateLock.unlock() }
+        return _currentSubtitleIsBitmap
+    }
+    private func setCurrentSubtitleIsBitmap(_ value: Bool) {
+        bitmapSubtitleStateLock.lock()
+        defer { bitmapSubtitleStateLock.unlock() }
+        _currentSubtitleIsBitmap = value
+    }
     var currentVideoWidth: Int {
         let width = getInt("video-out-params/w")
         return width > 0 ? width : getInt("video-params/w")
@@ -1178,11 +1189,11 @@ final class MPVPlayerViewController: UIViewController {
             let type = getString("track-list/\(i)/type") ?? ""
             let codec = getString("track-list/\(i)/codec") ?? ""
             if type == "sub" && (isBitmapSubtitleCodec(codec) || isBitmapSubtitleType(codec)) {
-                currentSubtitleIsBitmap = true
+                setCurrentSubtitleIsBitmap(true)
                 return
             }
         }
-        currentSubtitleIsBitmap = false
+        setCurrentSubtitleIsBitmap(false)
     }
 
     private func isBitmapSubtitleCodec(_ codec: String) -> Bool {
