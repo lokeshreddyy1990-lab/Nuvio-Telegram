@@ -1261,13 +1261,18 @@ final class MPVPlayerViewController: UIViewController {
         var shadow = shadowValue
         checkError(mpv_set_property(mpv, "sub-shadow-offset", MPV_FORMAT_DOUBLE, &shadow))
 
+        // mpv paints the shadow with sub-back-color (--sub-shadow-color is an alias), so it
+        // must be opaque for any preset to be visible. With the shadow off this stays fully
+        // transparent, preserving the existing outline/box behaviour exactly.
+        let shadowColor = shadowValue != 0 ? style.outlineColor : "#00000000"
+
         checkError(mpv_set_property_string(mpv, "sub-color", style.textColor))
 
         // opaque-box (ASS BorderStyle 3): one rectangle per line sized to that line's text.
-        // Single outline layer only; back-color must stay transparent or boxes stack.
+        // Single outline layer only; back-color must stay transparent unless a shadow is on.
         let backgroundTransparent = style.backgroundColor.hasPrefix("#00")
         if backgroundTransparent {
-            checkError(mpv_set_property_string(mpv, "sub-back-color", style.backgroundColor))
+            checkError(mpv_set_property_string(mpv, "sub-back-color", shadowColor))
             checkError(mpv_set_property_string(mpv, "sub-outline-color", style.outlineColor))
             checkError(mpv_set_property_string(mpv, "sub-border-style", "outline-and-shadow"))
             var outline = Double(style.outlineSize)
@@ -1275,7 +1280,7 @@ final class MPVPlayerViewController: UIViewController {
             var lineSpacing: Double = 0
             checkError(mpv_set_property(mpv, "sub-line-spacing", MPV_FORMAT_DOUBLE, &lineSpacing))
         } else {
-            checkError(mpv_set_property_string(mpv, "sub-back-color", "#00000000"))
+            checkError(mpv_set_property_string(mpv, "sub-back-color", shadowColor))
             checkError(mpv_set_property_string(mpv, "sub-outline-color", style.backgroundColor))
             checkError(mpv_set_property_string(mpv, "sub-border-style", "opaque-box"))
             var outline = MpvSubtitleStyle.outlineSize

@@ -129,7 +129,7 @@
     <string name="collections_editor_shape_square">Square</string>
     <string name="collections_editor_shape_wide">Wide</string>
     <string name="collections_editor_show_all_tab_desc">Combine all catalogs into one tab</string>
-    <string name="collections_editor_show_all_tab">Show \"All\" Tab</string>
+    <string name="collections_editor_show_all_tab">Show "All" Tab</string>
     <string name="collections_editor_show_gif_when_configured_desc">Play the configured GIF instead of the static cover when available.</string>
     <string name="collections_editor_show_gif_when_configured">Show GIF When Configured</string>
     <string name="collections_editor_source_count">%1$d source(s) · %2$s</string>
@@ -500,17 +500,17 @@
     <string name="compose_player_shadow_depressed">Depressed</string>
     <string name="compose_player_shadow_offset">Shadow Offset</string>
     <string name="compose_player_shadow_outline_note">Shadow uses the outline color.</string>
-    <string name="compose_player_bitmap_style_note">Image-based subtitles (PGS, VobSub) can\'t be styled.</string>
+    <string name="compose_player_bitmap_style_note">Image-based subtitles (PGS, VobSub) can't be styled.</string>
     <string name="compose_player_advanced_ass_title">Advanced (ASS/SSA)</string>
     <string name="compose_player_ass_preserve">Preserve Anime &amp; SSA/ASS Styling (Recommended)</string>
-    <string name="compose_player_ass_preserve_desc">Keeps the subtitle file\'s own colors, outlines and fonts.</string>
+    <string name="compose_player_ass_preserve_desc">Keeps the subtitle file's own colors, outlines and fonts.</string>
     <string name="compose_player_ass_scale_only">Scale Only</string>
-    <string name="compose_player_ass_scale_only_desc">Apply size and position only, keep the file\'s styling.</string>
+    <string name="compose_player_ass_scale_only_desc">Apply size and position only, keep the file's styling.</string>
     <string name="compose_player_ass_override_colors">Override Colors &amp; Outlines</string>
     <string name="compose_player_ass_override_colors_desc">Apply your colors, background and outline over the file.</string>
     <string name="compose_player_ass_force">Force Full Override</string>
-    <string name="compose_player_ass_force_desc">Force this app\'s style onto every subtitle.</string>
-    <string name="compose_player_ass_info">Maps to mpv\'s sub-ass-override, handled natively by libmpv and libass.</string>
+    <string name="compose_player_ass_force_desc">Force this app's style onto every subtitle.</string>
+    <string name="compose_player_ass_info">Maps to mpv's sub-ass-override, handled natively by libmpv and libass.</string>
     <string name="compose_player_ass_reset_preserve">Reset to Preserve</string>
     <string name="compose_player_panel_episodes">Episodes</string>
     <string name="compose_player_panel_sources">Sources</string>
@@ -2376,7 +2376,7 @@
     <string name="cloud_library_playback_disabled">Cloud library is disabled.</string>
     <!-- IntroDB settings -->
     <string name="settings_playback_introdb_invalid_api_key">Invalid API Key or connection failed</string>
-    <string name="addons_manifest_missing_field">Manifest missing \"%1$s\"</string>
+    <string name="addons_manifest_missing_field">Manifest missing "%1$s"</string>
     <string name="collections_editor_tmdb_collection_title_format">TMDB Collection %1$s</string>
     <string name="collections_editor_tmdb_director_title_format">TMDB Director %1$s</string>
     <string name="collections_editor_tmdb_discover_title">TMDB Discover</string>

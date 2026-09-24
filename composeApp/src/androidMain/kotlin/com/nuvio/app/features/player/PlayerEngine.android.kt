@@ -1672,10 +1672,17 @@ private class NuvioLibmpvView(
             override fun applySubtitleStyle(style: SubtitleStyleState) {
                 mpv.setPropertyString("sub-ass-override", style.toMpvAssOverrideValue())
                 mpv.setPropertyString("sub-color", style.textColor.toMpvColor())
-                mpv.setPropertyString(
-                    "sub-back-color",
-                    if (style.backgroundColor.alphaByte() > 0) "#00000000" else style.backgroundColor.toMpvColor(),
-                )
+                // mpv paints the shadow with sub-back-color (--sub-shadow-color is an alias),
+                // so it must be opaque for any preset to be visible. With the shadow off this
+                // is byte-identical to the previous behaviour (fully transparent).
+                val shadowColor = if (style.toMpvShadowOffset() != 0f) {
+                    style.outlineColor.toMpvColor()
+                } else if (style.backgroundColor.alphaByte() > 0) {
+                    "#00000000"
+                } else {
+                    style.backgroundColor.toMpvColor()
+                }
+                mpv.setPropertyString("sub-back-color", shadowColor)
                 mpv.setPropertyString("sub-border-style", style.toMpvSubtitleBorderStyle())
                 mpv.setPropertyString("sub-bold", if (style.bold) "yes" else "no")
                 style.customFontDirectory()?.let { mpv.setPropertyString("sub-fonts-dir", it) }
@@ -1684,7 +1691,8 @@ private class NuvioLibmpvView(
                 mpv.setPropertyInt("sub-pos", (100 - style.bottomOffset / 10).coerceIn(0, 100))
 
                 // opaque-box: one outline layer per line; back-color must stay transparent
-                // or semi-transparent boxes stack. Line spacing < 2x padding closes the slit.
+                // unless a shadow is requested (the shadow layer is drawn with back-color),
+                // otherwise semi-transparent boxes stack. Line spacing < 2x padding closes the slit.
                 if (style.backgroundColor.alphaByte() > 0) {
                     mpv.setPropertyString("sub-outline-color", style.backgroundColor.toMpvColor())
                     mpv.setPropertyString("sub-border-color", style.backgroundColor.toMpvColor())
